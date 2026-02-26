@@ -29,7 +29,7 @@ const receiptItemSchema = z.object({
   mrp: z.coerce.number().min(0),
 });
 
-export const createReceiptSchema = z.object({
+const receiptUpsertSchema = z.object({
   supplier_id: z.string().regex(objectIdRegex, 'Invalid supplier_id format'),
   invoice_number: z.string().trim().min(1),
   invoice_date: z.coerce.date(),
@@ -39,8 +39,12 @@ export const createReceiptSchema = z.object({
     .refine((value) => value === 'NORMAL_PURCHASE', {
       message: 'Only NORMAL_PURCHASE is allowed in v1',
     }),
+  discount_amount: z.coerce.number().min(0).default(0),
   items: z.array(receiptItemSchema).min(1),
 });
+
+export const createReceiptSchema = receiptUpsertSchema;
+export const updateReceiptSchema = receiptUpsertSchema;
 
 export const receiptListQuerySchema = paginationSchema.extend({
   supplier_id: z.string().regex(objectIdRegex, 'Invalid supplier_id format').optional(),
@@ -51,4 +55,8 @@ export const receiptListQuerySchema = paginationSchema.extend({
 
 export const receiptIdParamSchema = z.object({
   id: z.string().regex(objectIdRegex, 'Invalid id format'),
+});
+
+export const receiptBulkDeleteSchema = z.object({
+  ids: z.array(z.string().regex(objectIdRegex, 'Invalid id format')).min(1),
 });

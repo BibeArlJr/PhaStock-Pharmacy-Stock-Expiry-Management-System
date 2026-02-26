@@ -8,21 +8,21 @@ describe('Auth Integration', () => {
     await createAdminUser();
 
     const response = await request(app).post('/api/v1/auth/login').send({
-      username: 'admin',
+      identifier: 'admin@example.com',
       password: 'admin123',
     });
 
     expect(response.status).toBe(200);
     expect(response.body.success).toBe(true);
     expect(typeof response.body.data.token).toBe('string');
-    expect(response.body.data.user.username).toBe('admin');
+    expect(response.body.data.user.email).toBe('admin@example.com');
   });
 
   test('login wrong password returns 400 INVALID_CREDENTIALS', async () => {
     await createAdminUser();
 
     const response = await request(app).post('/api/v1/auth/login').send({
-      username: 'admin',
+      identifier: 'admin@example.com',
       password: 'wrong-pass',
     });
 

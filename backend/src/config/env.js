@@ -23,8 +23,10 @@ const forceDbName = (uri, dbName) => {
   }
 };
 
+export const NODE_ENV = process.env.NODE_ENV || 'development';
+
 const resolvedMongoUri = (() => {
-  if (process.env.NODE_ENV !== 'test') {
+  if (NODE_ENV !== 'test') {
     return process.env.MONGO_URI;
   }
 
@@ -35,7 +37,23 @@ const resolvedMongoUri = (() => {
   return forceDbName(process.env.MONGO_URI, 'phastock_test');
 })();
 
+const rawCorsOrigin =
+  process.env.CORS_ORIGIN || 'http://localhost:5173,http://localhost:3000';
+
+export const CORS_ORIGIN_ARRAY = rawCorsOrigin
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 export const PORT = process.env.PORT || 5000;
 export const MONGO_URI = resolvedMongoUri;
 export const JWT_SECRET = process.env.JWT_SECRET || '';
 export const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1d';
+export const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+
+export const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
+export const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
+export const SMTP_SECURE = String(process.env.SMTP_SECURE || 'false') === 'true';
+export const SMTP_USER = process.env.SMTP_USER || 'bibekaryal717@gmail.com';
+export const SMTP_PASS = process.env.SMTP_PASS || '';
+export const SMTP_FROM = process.env.SMTP_FROM || 'bibekaryal717@gmail.com';

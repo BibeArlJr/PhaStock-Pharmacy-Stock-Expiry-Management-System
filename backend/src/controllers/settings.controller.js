@@ -23,13 +23,14 @@ const toUpdatePayload = (body) => {
 };
 
 export const getSettings = asyncHandler(async (req, res) => {
-  const settings = await SettingsService.getSettings();
+  const settings = await SettingsService.getSettings(req.user.pharmacy.id);
   return ApiResponse.ok(res, toResponse(settings));
 });
 
 export const patchSettings = asyncHandler(async (req, res) => {
   const payload = toUpdatePayload(req.body);
-  await SettingsService.updateSettings(payload, req.user.id);
+
+  await SettingsService.updateSettings(payload, req.user.id, req.user.pharmacy.id);
 
   return ApiResponse.ok(res, {
     message: 'Settings updated',

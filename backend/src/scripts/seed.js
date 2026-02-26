@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { connectDB } from '../config/db.js';
 import Medicine from '../models/Medicine.js';
 import BatchStock from '../models/BatchStock.js';
+import Pharmacy from '../models/Pharmacy.js';
 import PurchaseReceipt from '../models/PurchaseReceipt.js';
 import Settings from '../models/Settings.js';
 import StockIssue from '../models/StockIssue.js';
@@ -184,11 +185,12 @@ const logStep = (label, message) => {
   console.log(`[${label}] ${message}`);
 };
 
-const seedSettings = async () => {
-  const existing = await Settings.findOne();
+const seedSettings = async (pharmacyId) => {
+  const existing = await Settings.findOne({ pharmacyId });
 
   if (!existing) {
     await Settings.create({
+      pharmacyId,
       lowStockLimitBoxes: 2,
       expiryAlertDays: 30,
     });
@@ -221,28 +223,52 @@ const seedSettings = async () => {
 };
 
 const seedUsers = async () => {
+  const demoPharmacyName = 'PhaStock Demo Pharmacy';
+  const pharmacy =
+    (await Pharmacy.findOne({ name: demoPharmacyName }, { _id: 1 }).lean()) ||
+    (await Pharmacy.create({ name: demoPharmacyName }));
+
   const userSeeds = [
-    { fullName: 'Admin User', username: 'admin', password: 'admin123', isActive: true },
-    { fullName: 'Staff User', username: 'staff', password: 'staff123', isActive: true },
+    {
+      fullName: 'Admin User',
+      email: 'admin@phastock.local',
+      phone: '9800001000',
+      password: 'admin123',
+      isActive: true,
+      isEmailVerified: true,
+    },
+    {
+      fullName: 'Staff User',
+      email: 'staff@phastock.local',
+      phone: '9800001001',
+      password: 'staff123',
+      isActive: true,
+      isEmailVerified: true,
+    },
   ];
 
-  const usernames = userSeeds.map((user) => user.username);
-  const existingUsers = await User.find({ username: { $in: usernames } }, { username: 1 }).lean();
-  const existingSet = new Set(existingUsers.map((user) => user.username));
+  const emails = userSeeds.map((user) => user.email);
+  const existingUsers = await User.find({ email: { $in: emails } }, { email: 1 }).lean();
+  const existingSet = new Set(existingUsers.map((user) => user.email));
 
   const toInsert = [];
 
   for (const seed of userSeeds) {
-    if (existingSet.has(seed.username)) {
+    if (existingSet.has(seed.email)) {
       summary.users.skipped += 1;
-      logStep('users', `skipped ${seed.username}`);
+      logStep('users', `skipped ${seed.email}`);
       continue;
     }
 
     const passwordHash = await hashPassword(seed.password);
     toInsert.push({
+      pharmacyId: pharmacy._id,
       fullName: seed.fullName,
-      username: seed.username,
+      email: seed.email,
+      phone: seed.phone,
+      isEmailVerified: seed.isEmailVerified,
+      emailVerificationCode: null,
+      emailVerificationExpiresAt: null,
       passwordHash,
       isActive: seed.isActive,
     });
@@ -253,6 +279,8 @@ const seedUsers = async () => {
     summary.users.created += toInsert.length;
     logStep('users', `created ${toInsert.length} user(s)`);
   }
+
+  return pharmacy._id.toString();
 };
 
 const seedSuppliers = async () => {
@@ -308,7 +336,7 @@ const seedMedicines = async () => {
 
 const buildReferenceMaps = async () => {
   const [users, suppliers, medicines] = await Promise.all([
-    User.find({ username: { $in: ['admin', 'staff'] } }, { username: 1 }).lean(),
+    User.find({ email: { $in: ['admin@phastock.local', 'staff@phastock.local'] } }, { email: 1 }).lean(),
     Supplier.find({ name: { $in: supplierSeeds.map((supplier) => supplier.name) } }, { name: 1 }).lean(),
     Medicine.find(
       {
@@ -321,19 +349,19 @@ const buildReferenceMaps = async () => {
     ).lean(),
   ]);
 
-  const userByUsername = new Map(users.map((user) => [user.username, user]));
+  const userByEmail = new Map(users.map((user) => [user.email, user]));
   const supplierByName = new Map(suppliers.map((supplier) => [supplier.name, supplier]));
   const medicineByKey = new Map(medicines.map((medicine) => [medicineKey(medicine), medicine]));
 
   return {
-    userByUsername,
+    userByEmail,
     supplierByName,
     medicineByKey,
   };
 };
 
 const seedReceipts = async (refs) => {
-  const admin = refs.userByUsername.get('admin');
+  const admin = refs.userByEmail.get('admin@phastock.local');
 
   for (const seed of receiptSeeds) {
     const supplier = refs.supplierByName.get(seed.supplierName);
@@ -392,7 +420,8 @@ const seedReceipts = async (refs) => {
 };
 
 const seedStockIssues = async (refs) => {
-  const staff = refs.userByUsername.get('staff') || refs.userByUsername.get('admin');
+  const staff =
+    refs.userByEmail.get('staff@phastock.local') || refs.userByEmail.get('admin@phastock.local');
 
   for (const seed of stockIssueSeeds) {
     const existing = await StockIssue.findOne({ remark: seed.remark }, { _id: 1 }).lean();
@@ -454,8 +483,8 @@ const run = async () => {
 
   logStep('seed', `started at ${now.toISOString()}`);
 
-  await seedSettings();
-  await seedUsers();
+  const pharmacyId = await seedUsers();
+  await seedSettings(pharmacyId);
   await seedSuppliers();
   await seedMedicines();
 

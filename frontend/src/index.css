@@ -1,0 +1,166 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 210 20% 98%;
+  --foreground: 142 38% 16%;
+
+  --card: 0 0% 100%;
+  --card-foreground: 142 38% 16%;
+
+  --popover: 0 0% 100%;
+  --popover-foreground: 142 38% 16%;
+
+  --primary: 141 53% 26%;
+  --primary-foreground: 0 0% 100%;
+
+  --accent: 133 57% 37%;
+  --accent-foreground: 0 0% 100%;
+
+  --success: 123 49% 42%;
+  --success-foreground: 0 0% 100%;
+
+  --surface: 82 100% 88%;
+  --surface-foreground: 142 38% 16%;
+
+  --muted: 210 14% 94%;
+  --muted-foreground: 145 16% 35%;
+
+  --border: 142 18% 84%;
+  --input: 142 18% 84%;
+  --ring: 141 53% 26%;
+
+  --radius: 0.625rem;
+}
+
+* {
+  @apply border-border;
+}
+
+body {
+  @apply bg-background text-foreground antialiased;
+  font-family: 'Inter', 'Segoe UI', Roboto, sans-serif;
+}
+
+#root {
+  @apply min-h-screen;
+}
+
+.login-blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(44px);
+  opacity: 0.7;
+  animation: login-float 24s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.login-blob-left {
+  width: 24rem;
+  height: 24rem;
+  left: -7rem;
+  top: 8%;
+  background: #e4ffc2;
+}
+
+.login-blob-right {
+  width: 21rem;
+  height: 21rem;
+  right: -6rem;
+  bottom: 8%;
+  background: rgba(41, 150, 64, 0.24);
+  animation-delay: -12s;
+}
+
+.loader-glow {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(56px);
+  pointer-events: none;
+}
+
+.loader-glow-left {
+  width: 200px;
+  height: 200px;
+  left: -60px;
+  top: -30px;
+  background: rgba(228, 255, 194, 0.55);
+}
+
+.loader-glow-right {
+  width: 220px;
+  height: 220px;
+  right: -70px;
+  bottom: -40px;
+  background: rgba(41, 150, 64, 0.16);
+}
+
+.loader-flow-cube {
+  position: absolute;
+  top: 9px;
+  right: 0;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  border: 1px solid rgba(31, 101, 52, 0.34);
+  animation: cube-flow-left 1.25s linear infinite;
+}
+
+.loader-flow-cube-1 {
+  background: rgba(31, 101, 52, 0.94);
+}
+
+.loader-flow-cube-2 {
+  background: rgba(41, 150, 64, 0.9);
+  animation-delay: 0.22s;
+}
+
+.loader-flow-cube-3 {
+  background: rgba(54, 160, 61, 0.86);
+  animation-delay: 0.44s;
+}
+
+.sidebar-toggle-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  height: 26px;
+  padding: 0 7px;
+  border-radius: 9999px;
+  border: 1px solid rgba(31, 101, 52, 0.25);
+  background: #ffffff;
+  color: #1f6534;
+  box-shadow: 0 4px 10px rgba(18, 61, 32, 0.12);
+}
+
+@keyframes cube-flow-left {
+  0% {
+    transform: translateX(18px);
+    opacity: 0;
+  }
+
+  20% {
+    opacity: 1;
+  }
+
+  100% {
+    transform: translateX(-42px);
+    opacity: 0;
+  }
+}
+
+@keyframes login-float {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  50% {
+    transform: translate3d(0, -18px, 0) scale(1.04);
+  }
+
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}

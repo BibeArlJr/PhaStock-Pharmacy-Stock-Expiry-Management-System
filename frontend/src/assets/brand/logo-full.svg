@@ -1,0 +1,6 @@
+<svg width="320" height="96" viewBox="0 0 320 96" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="6" y="12" width="72" height="72" rx="36" fill="#E4FFC2" stroke="#1F6534" stroke-width="6"/>
+  <path d="M30 25H45C52.732 25 59 31.268 59 39C59 46.732 52.732 53 45 53H30V25Z" fill="#299640"/>
+  <path d="M30 30H44C48.418 30 52 33.582 52 38C52 42.418 48.418 46 44 46H37V61H30V30Z" fill="white"/>
+  <text x="96" y="58" fill="#1F6534" font-size="38" font-family="Inter, Arial, sans-serif" font-weight="700">PhaStock</text>
+</svg>

@@ -28,6 +28,21 @@ const purchaseReceiptSchema = new Schema(
       enum: ['NORMAL_PURCHASE', 'RETURN_CREDIT'],
       required: true,
     },
+    totalAmount: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    discountAmount: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    netAmount: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
     createdBy: {
       type: Schema.Types.ObjectId,
       ref: 'User',

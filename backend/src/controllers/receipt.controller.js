@@ -31,12 +31,17 @@ const mapReceiptHeader = (header) => ({
     ? {
         id: header.supplier._id.toString(),
         name: header.supplier.name,
+        phone: header.supplier.phone || '',
+        address: header.supplier.address || '',
       }
     : null,
   invoice_number: header.invoiceNumber,
   invoice_date: header.invoiceDate.toISOString(),
   payment_mode: header.paymentMode,
   receipt_type: header.receiptType,
+  total_amount: header.totalAmount || 0,
+  discount_amount: header.discountAmount || 0,
+  net_amount: header.netAmount || 0,
   created_by: header.createdByUser
     ? {
         id: header.createdByUser._id.toString(),
@@ -67,25 +72,31 @@ const mapReceiptItem = (item) => ({
   mrp: item.mrp,
 });
 
+const mapReceiptPayload = (body) => ({
+  header: {
+    supplierId: body.supplier_id,
+    invoiceNumber: body.invoice_number,
+    invoiceDate: body.invoice_date,
+    paymentMode: body.payment_mode,
+    receiptType: body.receipt_type,
+    discountAmount: body.discount_amount,
+  },
+  items: body.items.map((item) => ({
+    medicineId: item.medicine_id,
+    pack: item.pack,
+    batchNo: item.batch_no,
+    expiryDate: item.expiry_date,
+    quantityBoxes: item.quantity_boxes,
+    purchasePrice: item.purchase_price,
+    mrp: item.mrp,
+  })),
+});
+
 export const createReceipt = asyncHandler(async (req, res) => {
   const payload = {
-    header: {
-      supplierId: req.body.supplier_id,
-      invoiceNumber: req.body.invoice_number,
-      invoiceDate: req.body.invoice_date,
-      paymentMode: req.body.payment_mode,
-      receiptType: req.body.receipt_type,
-    },
-    items: req.body.items.map((item) => ({
-      medicineId: item.medicine_id,
-      pack: item.pack,
-      batchNo: item.batch_no,
-      expiryDate: item.expiry_date,
-      quantityBoxes: item.quantity_boxes,
-      purchasePrice: item.purchase_price,
-      mrp: item.mrp,
-    })),
+    ...mapReceiptPayload(req.body),
     userId: req.user.id,
+    pharmacyId: req.user?.pharmacy?.id,
   };
 
   const result = await ReceiptService.createReceipt(payload);
@@ -96,8 +107,47 @@ export const createReceipt = asyncHandler(async (req, res) => {
   });
 });
 
+export const updateReceipt = asyncHandler(async (req, res) => {
+  const result = await ReceiptService.updateReceipt({
+    id: req.params.id,
+    ...mapReceiptPayload(req.body),
+    pharmacyId: req.user?.pharmacy?.id,
+  });
+
+  return ApiResponse.ok(res, {
+    receipt_id: result.receiptId,
+    message: 'Receipt updated',
+  });
+});
+
+export const deleteReceipt = asyncHandler(async (req, res) => {
+  const result = await ReceiptService.deleteReceipt({
+    id: req.params.id,
+    pharmacyId: req.user?.pharmacy?.id,
+  });
+
+  return ApiResponse.ok(res, {
+    receipt_id: result.receiptId,
+    message: 'Receipt deleted',
+  });
+});
+
+export const deleteReceiptsBulk = asyncHandler(async (req, res) => {
+  const result = await ReceiptService.deleteReceiptsBulk({
+    ids: req.body.ids,
+    pharmacyId: req.user?.pharmacy?.id,
+  });
+
+  return ApiResponse.ok(res, {
+    deleted_count: result.deletedCount,
+    deleted_ids: result.deletedIds,
+    message: 'Receipts deleted',
+  });
+});
+
 export const listReceipts = asyncHandler(async (req, res) => {
   const result = await ReceiptService.listReceipts({
+    pharmacyId: req.user?.pharmacy?.id,
     supplierId: req.query.supplier_id,
     invoiceNumber: req.query.invoice_number,
     dateFrom: req.query.date_from,
@@ -115,7 +165,7 @@ export const listReceipts = asyncHandler(async (req, res) => {
 });
 
 export const getReceiptDetail = asyncHandler(async (req, res) => {
-  const detail = await ReceiptService.getReceiptDetail(req.params.id);
+  const detail = await ReceiptService.getReceiptDetail(req.params.id, req.user?.pharmacy?.id);
 
   if (!detail) {
     throw new ApiError(404, 'NOT_FOUND', 'Purchase receipt not found');

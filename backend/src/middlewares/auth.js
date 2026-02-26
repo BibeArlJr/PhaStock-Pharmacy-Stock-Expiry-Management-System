@@ -29,7 +29,10 @@ export const requireAuth = async (req, res, next) => {
       return next(new ApiError(401, 'UNAUTHORIZED', 'Invalid or expired token.'));
     }
 
-    const user = await User.findById(userId);
+    const user = await User.findById(userId).populate({
+      path: 'pharmacyId',
+      select: 'name isActive',
+    });
 
     if (!user) {
       return next(new ApiError(401, 'USER_NOT_FOUND', 'User not found.'));
@@ -39,10 +42,19 @@ export const requireAuth = async (req, res, next) => {
       return next(new ApiError(403, 'ACCOUNT_INACTIVE', 'Account is inactive'));
     }
 
+    if (!user.pharmacyId || !user.pharmacyId.isActive) {
+      return next(new ApiError(403, 'ACCOUNT_INACTIVE', 'Account is inactive'));
+    }
+
     req.user = {
       id: user._id.toString(),
       fullName: user.fullName,
-      username: user.username,
+      email: user.email,
+      phone: user.phone,
+      pharmacy: {
+        id: user.pharmacyId._id.toString(),
+        name: user.pharmacyId.name,
+      },
     };
 
     return next();

@@ -4,6 +4,12 @@ const { Schema } = mongoose;
 
 const settingsSchema = new Schema(
   {
+    pharmacyId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Pharmacy',
+      required: true,
+      unique: true,
+    },
     lowStockLimitBoxes: {
       type: Number,
       default: 2,

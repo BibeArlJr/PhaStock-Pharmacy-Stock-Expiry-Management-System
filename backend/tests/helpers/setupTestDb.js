@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { connectDB } from '../../src/config/db.js';
 import BatchStock from '../../src/models/BatchStock.js';
 import Medicine from '../../src/models/Medicine.js';
+import Pharmacy from '../../src/models/Pharmacy.js';
 import PurchaseReceipt from '../../src/models/PurchaseReceipt.js';
 import PurchaseReceiptItem from '../../src/models/PurchaseReceiptItem.js';
 import Settings from '../../src/models/Settings.js';
@@ -17,6 +18,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   await Promise.all([
     User.deleteMany({}),
+    Pharmacy.deleteMany({}),
     Settings.deleteMany({}),
     Medicine.deleteMany({}),
     Supplier.deleteMany({}),

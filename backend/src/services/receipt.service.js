@@ -3,7 +3,10 @@ import mongoose from 'mongoose';
 import BatchStock from '../models/BatchStock.js';
 import PurchaseReceipt from '../models/PurchaseReceipt.js';
 import PurchaseReceiptItem from '../models/PurchaseReceiptItem.js';
+import StockIssue from '../models/StockIssue.js';
+import User from '../models/User.js';
 import ApiError from '../utils/ApiError.js';
+import { rebuildBatchStockForPharmacy } from './batchRebuild.service.js';
 
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -26,6 +29,7 @@ const aggregateBatchOps = (items) => {
       existing.quantityBoxes += item.quantityBoxes;
       existing.purchasePrice = item.purchasePrice;
       existing.mrp = item.mrp;
+      existing.sourceReceiptItemId = item._id;
       continue;
     }
 
@@ -37,17 +41,106 @@ const aggregateBatchOps = (items) => {
       quantityBoxes: item.quantityBoxes,
       purchasePrice: item.purchasePrice,
       mrp: item.mrp,
+      sourceReceiptItemId: item._id,
     });
   }
 
   return Array.from(grouped.values());
 };
 
-export const createReceipt = async ({ header, items, userId }) => {
+const computeTotals = ({ items, discountAmount = 0 }) => {
+  const totalAmount = items.reduce(
+    (sum, item) => sum + Number(item.quantityBoxes) * Number(item.purchasePrice),
+    0
+  );
+
+  const safeDiscountAmount = Number(discountAmount ?? 0);
+
+  if (safeDiscountAmount < 0) {
+    throw new ApiError(400, 'INVALID_DISCOUNT', 'Discount amount must be 0 or more');
+  }
+
+  if (safeDiscountAmount > totalAmount) {
+    throw new ApiError(400, 'INVALID_DISCOUNT', 'Discount amount cannot exceed total amount');
+  }
+
+  return {
+    totalAmount,
+    discountAmount: safeDiscountAmount,
+    netAmount: totalAmount - safeDiscountAmount,
+  };
+};
+
+const assertReceiptBelongsToPharmacy = async ({ receiptId, pharmacyId, session }) => {
+  const receipt = await PurchaseReceipt.findById(receiptId)
+    .session(session)
+    .select('_id createdBy supplierId invoiceNumber invoiceDate paymentMode receiptType totalAmount discountAmount netAmount createdAt');
+
+  if (!receipt) {
+    throw new ApiError(404, 'NOT_FOUND', 'Purchase receipt not found');
+  }
+
+  const creator = await User.findById(receipt.createdBy)
+    .session(session)
+    .select('_id pharmacyId')
+    .lean();
+
+  if (!creator || creator.pharmacyId?.toString?.() !== pharmacyId) {
+    throw new ApiError(404, 'NOT_FOUND', 'Purchase receipt not found');
+  }
+
+  return receipt;
+};
+
+const hasIssueForReceipt = async ({ receiptId, pharmacyId, session }) => {
+  const receiptItems = await PurchaseReceiptItem.find(
+    { receiptId },
+    { medicineId: 1, pack: 1, batchNo: 1, expiryDate: 1 }
+  )
+    .session(session)
+    .lean();
+
+  if (receiptItems.length === 0) {
+    return false;
+  }
+
+  const relatedBatches = await BatchStock.find(
+    {
+      pharmacyId: new mongoose.Types.ObjectId(pharmacyId),
+      $or: receiptItems.map((item) => ({
+        medicineId: item.medicineId,
+        pack: item.pack,
+        batchNo: item.batchNo,
+        expiryDate: item.expiryDate,
+      })),
+    },
+    { _id: 1 }
+  )
+    .session(session)
+    .lean();
+
+  if (relatedBatches.length === 0) {
+    return false;
+  }
+
+  const hasIssue = await StockIssue.exists({
+    batchStockId: { $in: relatedBatches.map((row) => row._id) },
+  }).session(session);
+
+  return Boolean(hasIssue);
+};
+
+export const createReceipt = async ({ header, items, userId, pharmacyId }) => {
   const session = await mongoose.startSession();
+  const pharmacyObjectId = pharmacyId ? new mongoose.Types.ObjectId(pharmacyId) : undefined;
 
   try {
     session.startTransaction();
+
+    const totals = computeTotals({
+      items,
+      discountAmount: header.discountAmount,
+    });
 
     const [receipt] = await PurchaseReceipt.create(
       [
@@ -57,6 +150,9 @@ export const createReceipt = async ({ header, items, userId }) => {
           invoiceDate: header.invoiceDate,
           paymentMode: header.paymentMode,
           receiptType: header.receiptType,
+          totalAmount: totals.totalAmount,
+          discountAmount: totals.discountAmount,
+          netAmount: totals.netAmount,
           createdBy: userId,
         },
       ],
@@ -74,46 +170,61 @@ export const createReceipt = async ({ header, items, userId }) => {
       mrp: item.mrp,
     }));
 
-    await PurchaseReceiptItem.insertMany(receiptItems, {
+    const insertedReceiptItems = await PurchaseReceiptItem.insertMany(receiptItems, {
       session,
       ordered: true,
     });
 
-    const groupedItems = aggregateBatchOps(receiptItems);
+    const groupedItems = aggregateBatchOps(insertedReceiptItems);
 
-    await BatchStock.bulkWrite(
-      groupedItems.map((item) => ({
-        updateOne: {
-          filter: {
+    const batchBulkOps = groupedItems.map((item) => ({
+      updateOne: {
+        filter: {
+          ...(pharmacyObjectId ? { pharmacyId: pharmacyObjectId } : {}),
+          medicineId: item.medicineId,
+          pack: item.pack,
+          batchNo: item.batchNo,
+          expiryDate: item.expiryDate,
+        },
+        update: {
+          $setOnInsert: {
+            ...(pharmacyObjectId ? { pharmacyId: pharmacyObjectId } : {}),
             medicineId: item.medicineId,
             pack: item.pack,
             batchNo: item.batchNo,
             expiryDate: item.expiryDate,
+            createdBy: userId,
           },
-          update: {
-            $setOnInsert: {
-              medicineId: item.medicineId,
-              pack: item.pack,
-              batchNo: item.batchNo,
-              expiryDate: item.expiryDate,
-            },
-            $inc: {
-              availableBoxes: item.quantityBoxes,
-            },
-            $set: {
-              purchasePrice: item.purchasePrice,
-              mrp: item.mrp,
-            },
+          $inc: {
+            availableBoxes: item.quantityBoxes,
           },
-          upsert: true,
+          $set: {
+            purchasePrice: item.purchasePrice,
+            mrp: item.mrp,
+            source: 'receipt',
+            sourceType: 'receipt',
+            sourceReceiptId: receipt._id,
+            sourceReceiptItemId: item.sourceReceiptItemId || null,
+            lastReceiptId: receipt._id,
+          },
         },
-      })),
+        upsert: true,
+      },
+    }));
+
+    if (process.env.DEBUG_BATCH_BULK_OPS === '1' && batchBulkOps[0]) {
+      console.log('[receipt.createReceipt] sample BatchStock bulk op:', JSON.stringify(batchBulkOps[0]));
+    }
+
+    await BatchStock.bulkWrite(
+      batchBulkOps,
       { session }
     );
 
     const batchDocs = await BatchStock.find(
       {
         $or: groupedItems.map((item) => ({
+          ...(pharmacyObjectId ? { pharmacyId: pharmacyObjectId } : {}),
           medicineId: item.medicineId,
           pack: item.pack,
           batchNo: item.batchNo,
@@ -122,10 +233,6 @@ export const createReceipt = async ({ header, items, userId }) => {
       },
       {
         _id: 1,
-        medicineId: 1,
-        pack: 1,
-        batchNo: 1,
-        expiryDate: 1,
         availableBoxes: 1,
       }
     )
@@ -158,7 +265,214 @@ export const createReceipt = async ({ header, items, userId }) => {
   }
 };
 
+export const updateReceipt = async ({ id, header, items, pharmacyId }) => {
+  const session = await mongoose.startSession();
+
+  try {
+    session.startTransaction();
+
+    const receipt = await assertReceiptBelongsToPharmacy({
+      receiptId: id,
+      pharmacyId,
+      session,
+    });
+
+    const duplicate = await PurchaseReceipt.findOne({
+      _id: { $ne: receipt._id },
+      supplierId: header.supplierId,
+      invoiceNumber: header.invoiceNumber,
+    })
+      .session(session)
+      .select('_id')
+      .lean();
+
+    if (duplicate) {
+      throw new ApiError(409, 'DUPLICATE_INVOICE', 'Invoice number already exists for this supplier');
+    }
+
+    const totals = computeTotals({ items, discountAmount: header.discountAmount });
+
+    await PurchaseReceipt.updateOne(
+      { _id: receipt._id },
+      {
+        $set: {
+          supplierId: header.supplierId,
+          invoiceNumber: header.invoiceNumber,
+          invoiceDate: header.invoiceDate,
+          paymentMode: header.paymentMode,
+          receiptType: header.receiptType,
+          totalAmount: totals.totalAmount,
+          discountAmount: totals.discountAmount,
+          netAmount: totals.netAmount,
+        },
+      },
+      { session }
+    );
+
+    await PurchaseReceiptItem.deleteMany({ receiptId: receipt._id }).session(session);
+
+    const receiptItems = items.map((item) => ({
+      receiptId: receipt._id,
+      medicineId: item.medicineId,
+      pack: item.pack,
+      batchNo: item.batchNo,
+      expiryDate: item.expiryDate,
+      quantityBoxes: item.quantityBoxes,
+      purchasePrice: item.purchasePrice,
+      mrp: item.mrp,
+    }));
+
+    await PurchaseReceiptItem.insertMany(receiptItems, { session, ordered: true });
+
+    await rebuildBatchStockForPharmacy({ pharmacyId, session });
+
+    await session.commitTransaction();
+
+    return {
+      receiptId: receipt._id.toString(),
+    };
+  } catch (error) {
+    await session.abortTransaction();
+
+    if (error?.code === 11000) {
+      throw new ApiError(409, 'DUPLICATE_INVOICE', 'Invoice number already exists for this supplier');
+    }
+
+    throw error;
+  } finally {
+    session.endSession();
+  }
+};
+
+export const deleteReceipt = async ({ id, pharmacyId }) => {
+  const session = await mongoose.startSession();
+
+  try {
+    session.startTransaction();
+
+    const receipt = await assertReceiptBelongsToPharmacy({
+      receiptId: id,
+      pharmacyId,
+      session,
+    });
+
+    const hasIssue = await hasIssueForReceipt({
+      receiptId: receipt._id,
+      pharmacyId,
+      session,
+    });
+
+    if (hasIssue) {
+      throw new ApiError(
+        409,
+        'BATCH_HAS_STOCK_ISSUES',
+        'Cannot delete this batch because stock has already been issued from it.'
+      );
+    }
+
+    await PurchaseReceiptItem.deleteMany({ receiptId: receipt._id }).session(session);
+    await PurchaseReceipt.deleteOne({ _id: receipt._id }).session(session);
+
+    await rebuildBatchStockForPharmacy({ pharmacyId, session });
+
+    await session.commitTransaction();
+
+    return {
+      receiptId: receipt._id.toString(),
+    };
+  } catch (error) {
+    await session.abortTransaction();
+    throw error;
+  } finally {
+    session.endSession();
+  }
+};
+
+export const deleteReceiptsBulk = async ({ ids, pharmacyId }) => {
+  const uniqueIds = [...new Set((ids || []).filter(Boolean))];
+
+  if (uniqueIds.length === 0) {
+    return {
+      deletedCount: 0,
+      deletedIds: [],
+    };
+  }
+
+  const session = await mongoose.startSession();
+
+  try {
+    session.startTransaction();
+
+    const requestedIds = uniqueIds.map((id) => new mongoose.Types.ObjectId(id));
+    const receipts = await PurchaseReceipt.find(
+      { _id: { $in: requestedIds } },
+      { _id: 1, createdBy: 1 }
+    )
+      .session(session)
+      .lean();
+
+    if (receipts.length === 0) {
+      throw new ApiError(404, 'NOT_FOUND', 'No receipts found for deletion');
+    }
+
+    const creators = await User.find(
+      { _id: { $in: [...new Set(receipts.map((row) => row.createdBy.toString()))] } },
+      { _id: 1, pharmacyId: 1 }
+    )
+      .session(session)
+      .lean();
+
+    const creatorMap = new Map(
+      creators.map((creator) => [creator._id.toString(), creator.pharmacyId?.toString?.() || ''])
+    );
+
+    const scopedReceipts = receipts.filter(
+      (receipt) => creatorMap.get(receipt.createdBy.toString()) === pharmacyId
+    );
+
+    if (scopedReceipts.length === 0) {
+      throw new ApiError(404, 'NOT_FOUND', 'No receipts found for deletion');
+    }
+
+    for (const receipt of scopedReceipts) {
+      const hasIssue = await hasIssueForReceipt({
+        receiptId: receipt._id,
+        pharmacyId,
+        session,
+      });
+
+      if (hasIssue) {
+        throw new ApiError(
+          409,
+          'BATCH_HAS_STOCK_ISSUES',
+          'Cannot delete this batch because stock has already been issued from it.'
+        );
+      }
+    }
+
+    const scopedIds = scopedReceipts.map((row) => row._id);
+
+    await PurchaseReceiptItem.deleteMany({ receiptId: { $in: scopedIds } }).session(session);
+    await PurchaseReceipt.deleteMany({ _id: { $in: scopedIds } }).session(session);
+
+    await rebuildBatchStockForPharmacy({ pharmacyId, session });
+
+    await session.commitTransaction();
+
+    return {
+      deletedCount: scopedIds.length,
+      deletedIds: scopedIds.map((id) => id.toString()),
+    };
+  } catch (error) {
+    await session.abortTransaction();
+    throw error;
+  } finally {
+    session.endSession();
+  }
+};
+
 export const listReceipts = async ({
+  pharmacyId,
   supplierId,
   invoiceNumber,
   dateFrom,
@@ -195,6 +509,27 @@ export const listReceipts = async ({
 
   const [result] = await PurchaseReceipt.aggregate([
     { $match: match },
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'createdBy',
+        foreignField: '_id',
+        as: 'createdByUser',
+        pipeline: [{ $project: { _id: 1, fullName: 1, pharmacyId: 1 } }],
+      },
+    },
+    {
+      $addFields: {
+        createdByUser: { $arrayElemAt: ['$createdByUser', 0] },
+      },
+    },
+    {
+      $match: {
+        ...(pharmacyId
+          ? { 'createdByUser.pharmacyId': new mongoose.Types.ObjectId(pharmacyId) }
+          : {}),
+      },
+    },
     { $sort: { invoiceDate: -1, _id: -1 } },
     {
       $facet: {
@@ -208,15 +543,6 @@ export const listReceipts = async ({
               foreignField: '_id',
               as: 'supplier',
               pipeline: [{ $project: { _id: 1, name: 1 } }],
-            },
-          },
-          {
-            $lookup: {
-              from: 'users',
-              localField: 'createdBy',
-              foreignField: '_id',
-              as: 'createdByUser',
-              pipeline: [{ $project: { _id: 1, fullName: 1 } }],
             },
           },
           {
@@ -239,7 +565,10 @@ export const listReceipts = async ({
               receiptType: 1,
               createdAt: 1,
               supplier: { $arrayElemAt: ['$supplier', 0] },
-              createdByUser: { $arrayElemAt: ['$createdByUser', 0] },
+              createdByUser: {
+                _id: '$createdByUser._id',
+                fullName: '$createdByUser.fullName',
+              },
               itemCount: {
                 $ifNull: [{ $arrayElemAt: ['$itemStats.count', 0] }, 0],
               },
@@ -259,27 +588,39 @@ export const listReceipts = async ({
   };
 };
 
-export const getReceiptDetail = async (id) => {
+export const getReceiptDetail = async (id, pharmacyId) => {
   const receiptObjectId = new mongoose.Types.ObjectId(id);
 
   const [header] = await PurchaseReceipt.aggregate([
     { $match: { _id: receiptObjectId } },
     {
       $lookup: {
-        from: 'suppliers',
-        localField: 'supplierId',
-        foreignField: '_id',
-        as: 'supplier',
-        pipeline: [{ $project: { _id: 1, name: 1 } }],
-      },
-    },
-    {
-      $lookup: {
         from: 'users',
         localField: 'createdBy',
         foreignField: '_id',
         as: 'createdByUser',
-        pipeline: [{ $project: { _id: 1, fullName: 1 } }],
+        pipeline: [{ $project: { _id: 1, fullName: 1, pharmacyId: 1 } }],
+      },
+    },
+    {
+      $addFields: {
+        createdByUser: { $arrayElemAt: ['$createdByUser', 0] },
+      },
+    },
+    {
+      $match: {
+        ...(pharmacyId
+          ? { 'createdByUser.pharmacyId': new mongoose.Types.ObjectId(pharmacyId) }
+          : {}),
+      },
+    },
+    {
+      $lookup: {
+        from: 'suppliers',
+        localField: 'supplierId',
+        foreignField: '_id',
+        as: 'supplier',
+        pipeline: [{ $project: { _id: 1, name: 1, phone: 1, address: 1 } }],
       },
     },
     {
@@ -289,9 +630,15 @@ export const getReceiptDetail = async (id) => {
         invoiceDate: 1,
         paymentMode: 1,
         receiptType: 1,
+        totalAmount: 1,
+        discountAmount: 1,
+        netAmount: 1,
         createdAt: 1,
         supplier: { $arrayElemAt: ['$supplier', 0] },
-        createdByUser: { $arrayElemAt: ['$createdByUser', 0] },
+        createdByUser: {
+          _id: '$createdByUser._id',
+          fullName: '$createdByUser.fullName',
+        },
       },
     },
   ]);
