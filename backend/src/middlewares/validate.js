@@ -1,12 +1,10 @@
-import ApiError from '../utils/ApiError.js';
-
+const ApiError = require('../utils/ApiError.js');
 const formatZodIssues = (issues) =>
   issues.map((issue) => ({
     path: issue.path.join('.'),
     message: issue.message,
   }));
-
-export const validate = (schemaConfig) => (req, res, next) => {
+const validate = (schemaConfig) => (req, res, next) => {
   if (!schemaConfig) {
     return next(new ApiError(500, 'VALIDATION_SCHEMA_MISSING', 'Validation schema is not provided.'));
   }
@@ -44,3 +42,5 @@ export const validate = (schemaConfig) => (req, res, next) => {
 
   return next();
 };
+
+module.exports = { validate };

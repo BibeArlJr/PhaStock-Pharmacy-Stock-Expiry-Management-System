@@ -1,15 +1,8 @@
-import { Router } from 'express';
-
-import * as MedicineController from '../controllers/medicine.controller.js';
-import { requireAuth } from '../middlewares/auth.js';
-import { validate } from '../middlewares/validate.js';
-import {
-  createMedicineSchema,
-  idParamSchema,
-  medicineListQuerySchema,
-  patchMedicineSchema,
-} from '../validators/medicine.validators.js';
-
+const { Router } = require('express');
+const MedicineController = require('../controllers/medicine.controller.js');
+const { requireAuth } = require('../middlewares/auth.js');
+const { validate } = require('../middlewares/validate.js');
+const { createMedicineSchema, idParamSchema, medicineListQuerySchema, patchMedicineSchema } = require('../validators/medicine.validators.js');
 const router = Router();
 
 router.use(requireAuth);
@@ -22,5 +15,6 @@ router.patch(
   validate({ params: idParamSchema, body: patchMedicineSchema }),
   MedicineController.patchMedicine
 );
+router.delete('/:id', validate({ params: idParamSchema }), MedicineController.deleteMedicine);
 
-export default router;
+module.exports = router;

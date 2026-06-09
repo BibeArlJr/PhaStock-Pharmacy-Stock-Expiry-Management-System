@@ -1,13 +1,10 @@
-import mongoose from 'mongoose';
-
-import BatchStock from '../models/BatchStock.js';
-import PurchaseReceipt from '../models/PurchaseReceipt.js';
-import PurchaseReceiptItem from '../models/PurchaseReceiptItem.js';
-import StockIssue from '../models/StockIssue.js';
-import User from '../models/User.js';
-import ApiError from '../utils/ApiError.js';
-import { rebuildBatchStockForPharmacy } from './batchRebuild.service.js';
-
+const mongoose = require('mongoose');const BatchStock = require('../models/BatchStock.js');
+const PurchaseReceipt = require('../models/PurchaseReceipt.js');
+const PurchaseReceiptItem = require('../models/PurchaseReceiptItem.js');
+const StockIssue = require('../models/StockIssue.js');
+const User = require('../models/User.js');
+const ApiError = require('../utils/ApiError.js');
+const { rebuildBatchStockForPharmacy } = require('./batchRebuild.service.js');
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const buildBatchKey = (item) =>
@@ -129,8 +126,7 @@ const hasIssueForReceipt = async ({ receiptId, pharmacyId, session }) => {
 
   return Boolean(hasIssue);
 };
-
-export const createReceipt = async ({ header, items, userId, pharmacyId }) => {
+const createReceipt = async ({ header, items, userId, pharmacyId }) => {
   const session = await mongoose.startSession();
   const pharmacyObjectId = pharmacyId ? new mongoose.Types.ObjectId(pharmacyId) : undefined;
 
@@ -264,8 +260,7 @@ export const createReceipt = async ({ header, items, userId, pharmacyId }) => {
     session.endSession();
   }
 };
-
-export const updateReceipt = async ({ id, header, items, pharmacyId }) => {
+const updateReceipt = async ({ id, header, items, pharmacyId }) => {
   const session = await mongoose.startSession();
 
   try {
@@ -343,8 +338,7 @@ export const updateReceipt = async ({ id, header, items, pharmacyId }) => {
     session.endSession();
   }
 };
-
-export const deleteReceipt = async ({ id, pharmacyId }) => {
+const deleteReceipt = async ({ id, pharmacyId }) => {
   const session = await mongoose.startSession();
 
   try {
@@ -387,8 +381,7 @@ export const deleteReceipt = async ({ id, pharmacyId }) => {
     session.endSession();
   }
 };
-
-export const deleteReceiptsBulk = async ({ ids, pharmacyId }) => {
+const deleteReceiptsBulk = async ({ ids, pharmacyId }) => {
   const uniqueIds = [...new Set((ids || []).filter(Boolean))];
 
   if (uniqueIds.length === 0) {
@@ -470,11 +463,12 @@ export const deleteReceiptsBulk = async ({ ids, pharmacyId }) => {
     session.endSession();
   }
 };
-
-export const listReceipts = async ({
+const listReceipts = async ({
   pharmacyId,
   supplierId,
   invoiceNumber,
+  q,
+  batchNo,
   dateFrom,
   dateTo,
   page = 1,
@@ -493,6 +487,16 @@ export const listReceipts = async ({
     };
   }
 
+  if (batchNo) {
+    const matchingReceiptIds = await PurchaseReceiptItem.find({
+      batchNo: { $regex: escapeRegex(batchNo), $options: 'i' },
+    }).distinct('receiptId');
+
+    match._id = {
+      $in: (matchingReceiptIds || []).map((id) => new mongoose.Types.ObjectId(id)),
+    };
+  }
+
   if (dateFrom || dateTo) {
     match.invoiceDate = {};
 
@@ -506,6 +510,8 @@ export const listReceipts = async ({
   }
 
   const skip = (page - 1) * limit;
+
+  const qRegex = q ? new RegExp(escapeRegex(q), 'i') : null;
 
   const [result] = await PurchaseReceipt.aggregate([
     { $match: match },
@@ -530,6 +536,32 @@ export const listReceipts = async ({
           : {}),
       },
     },
+    ...(qRegex
+      ? [
+          {
+            $lookup: {
+              from: 'suppliers',
+              localField: 'supplierId',
+              foreignField: '_id',
+              as: 'supplierForSearch',
+              pipeline: [{ $project: { _id: 1, name: 1 } }],
+            },
+          },
+          {
+            $addFields: {
+              supplierForSearch: { $arrayElemAt: ['$supplierForSearch', 0] },
+            },
+          },
+          {
+            $match: {
+              $or: [
+                { invoiceNumber: { $regex: qRegex } },
+                { 'supplierForSearch.name': { $regex: qRegex } },
+              ],
+            },
+          },
+        ]
+      : []),
     { $sort: { invoiceDate: -1, _id: -1 } },
     {
       $facet: {
@@ -587,8 +619,7 @@ export const listReceipts = async ({
     limit,
   };
 };
-
-export const getReceiptDetail = async (id, pharmacyId) => {
+const getReceiptDetail = async (id, pharmacyId) => {
   const receiptObjectId = new mongoose.Types.ObjectId(id);
 
   const [header] = await PurchaseReceipt.aggregate([
@@ -679,3 +710,5 @@ export const getReceiptDetail = async (id, pharmacyId) => {
     items,
   };
 };
+
+module.exports = { createReceipt, updateReceipt, deleteReceipt, deleteReceiptsBulk, listReceipts, getReceiptDetail };

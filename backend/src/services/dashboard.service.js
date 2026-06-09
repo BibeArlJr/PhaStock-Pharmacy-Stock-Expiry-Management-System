@@ -1,7 +1,6 @@
-import BatchStock from '../models/BatchStock.js';
-import Medicine from '../models/Medicine.js';
-import { getSettings } from './settings.service.js';
-
+const BatchStock = require('../models/BatchStock.js');
+const Medicine = require('../models/Medicine.js');
+const { getSettings } = require('./settings.service.js');
 const startOfToday = () => {
   const now = new Date();
   return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
@@ -20,8 +19,7 @@ const buildScopedFilter = (Model, pharmacyId) => {
 
   return Model.schema.path('pharmacyId') ? { pharmacyId } : {};
 };
-
-export const getDashboardSummary = async (pharmacyId) => {
+const getDashboardSummary = async (pharmacyId) => {
   const settings = pharmacyId ? await getSettings(pharmacyId) : null;
   const lowStockLimit = settings?.lowStockLimitBoxes ?? 2;
   const expiryAlertDays = settings?.expiryAlertDays ?? 30;
@@ -69,3 +67,5 @@ export const getDashboardSummary = async (pharmacyId) => {
     out_of_stock_batches: outOfStockBatches,
   };
 };
+
+module.exports = { getDashboardSummary };

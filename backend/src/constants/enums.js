@@ -1,5 +1,7 @@
 // Central place for shared enums/constants.
-export const USER_ROLES = Object.freeze({
+const USER_ROLES = Object.freeze({
   ADMIN: 'ADMIN',
   STAFF: 'STAFF',
 });
+
+module.exports = { USER_ROLES };

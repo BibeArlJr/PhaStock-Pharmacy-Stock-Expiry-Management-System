@@ -1,21 +1,12 @@
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import mongoose from 'mongoose';
-
-import { JWT_EXPIRES_IN, JWT_SECRET } from '../config/env.js';
-import Pharmacy from '../models/Pharmacy.js';
-import User from '../models/User.js';
-import ApiError from '../utils/ApiError.js';
-import {
-  confirm,
-  createVerificationForUser,
-  findLatestPendingVerificationByEmail,
-  getVerificationByToken,
-  issueFreshVerificationForUser,
-  resendWithOptionalEmailUpdate,
-} from './emailVerification.service.js';
-import { sendVerificationEmail } from '../utils/mailer.js';
-
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
+const { JWT_EXPIRES_IN, JWT_SECRET } = require('../config/env.js');
+const Pharmacy = require('../models/Pharmacy.js');
+const User = require('../models/User.js');
+const ApiError = require('../utils/ApiError.js');
+const { confirm, createVerificationForUser, findLatestPendingVerificationByEmail, getVerificationByToken, issueFreshVerificationForUser, resendWithOptionalEmailUpdate } = require('./emailVerification.service.js');
+const { sendVerificationEmail } = require('../utils/mailer.js');
 const SALT_ROUNDS = 10;
 const PHONE_REGEX = /^\+?[0-9]{7,15}$/;
 
@@ -38,12 +29,9 @@ const buildAuthResponse = (token, user, pharmacy) => ({
 });
 
 const normalizeIdentifier = (identifier) => identifier.trim();
-
-export const hashPassword = async (plain) => bcrypt.hash(plain, SALT_ROUNDS);
-
-export const verifyPassword = async (plain, hash) => bcrypt.compare(plain, hash);
-
-export const signupPharmacy = async ({
+const hashPassword = async (plain) => bcrypt.hash(plain, SALT_ROUNDS);
+const verifyPassword = async (plain, hash) => bcrypt.compare(plain, hash);
+const signupPharmacy = async ({
   pharmacyName,
   ownerFullName,
   email,
@@ -151,8 +139,7 @@ export const signupPharmacy = async ({
     message: 'Verification email sent',
   };
 };
-
-export const getVerificationInfo = async ({ token }) => {
+const getVerificationInfo = async ({ token }) => {
   const verification = await getVerificationByToken(token);
   const user = await User.findById(verification.userId, { email: 1 }).lean();
 
@@ -165,8 +152,7 @@ export const getVerificationInfo = async ({ token }) => {
     expires_at: verification.expiresAt.toISOString(),
   };
 };
-
-export const resendVerification = async ({ token, email }) => {
+const resendVerification = async ({ token, email }) => {
   const result = await resendWithOptionalEmailUpdate({
     token,
     newEmail: email,
@@ -179,8 +165,7 @@ export const resendVerification = async ({ token, email }) => {
     message: 'Verification code sent',
   };
 };
-
-export const resendVerificationAlias = async ({ token, email }) => {
+const resendVerificationAlias = async ({ token, email }) => {
   if (token) {
     return resendVerification({ token, email });
   }
@@ -193,10 +178,8 @@ export const resendVerificationAlias = async ({ token, email }) => {
 
   return resendVerification({ token: latest.token, email });
 };
-
-export const confirmVerification = async ({ token, code }) => confirm({ token, code });
-
-export const login = async ({ identifier, password }) => {
+const confirmVerification = async ({ token, code }) => confirm({ token, code });
+const login = async ({ identifier, password }) => {
   const normalizedIdentifier = normalizeIdentifier(identifier);
 
   const user = await User.findOne({
@@ -242,8 +225,7 @@ export const login = async ({ identifier, password }) => {
 
   return buildAuthResponse(token, user, user.pharmacyId);
 };
-
-export const getMe = async (userId) => {
+const getMe = async (userId) => {
   const user = await User.findById(userId).populate({
     path: 'pharmacyId',
     select: 'name isActive',
@@ -266,3 +248,5 @@ export const getMe = async (userId) => {
     pharmacy: toPharmacyProfile(user.pharmacyId),
   };
 };
+
+module.exports = { hashPassword, verifyPassword, signupPharmacy, getVerificationInfo, resendVerification, resendVerificationAlias, confirmVerification, login, getMe };

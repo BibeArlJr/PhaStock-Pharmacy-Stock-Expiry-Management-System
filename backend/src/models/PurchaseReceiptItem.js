@@ -1,5 +1,4 @@
-import mongoose from 'mongoose';
-
+const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
 const purchaseReceiptItemSchema = new Schema(
@@ -56,4 +55,4 @@ purchaseReceiptItemSchema.index({ expiryDate: 1 });
 
 const PurchaseReceiptItem = mongoose.model('PurchaseReceiptItem', purchaseReceiptItemSchema);
 
-export default PurchaseReceiptItem;
+module.exports = PurchaseReceiptItem;

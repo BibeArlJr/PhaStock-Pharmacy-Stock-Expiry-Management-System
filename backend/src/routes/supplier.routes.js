@@ -1,15 +1,8 @@
-import { Router } from 'express';
-
-import * as SupplierController from '../controllers/supplier.controller.js';
-import { requireAuth } from '../middlewares/auth.js';
-import { validate } from '../middlewares/validate.js';
-import {
-  createSupplierSchema,
-  idParamSchema,
-  patchSupplierSchema,
-  supplierListQuerySchema,
-} from '../validators/supplier.validators.js';
-
+const { Router } = require('express');
+const SupplierController = require('../controllers/supplier.controller.js');
+const { requireAuth } = require('../middlewares/auth.js');
+const { validate } = require('../middlewares/validate.js');
+const { createSupplierSchema, idParamSchema, patchSupplierSchema, supplierListQuerySchema } = require('../validators/supplier.validators.js');
 const router = Router();
 
 router.use(requireAuth);
@@ -22,5 +15,6 @@ router.patch(
   validate({ params: idParamSchema, body: patchSupplierSchema }),
   SupplierController.patchSupplier
 );
+router.delete('/:id', validate({ params: idParamSchema }), SupplierController.deleteSupplier);
 
-export default router;
+module.exports = router;

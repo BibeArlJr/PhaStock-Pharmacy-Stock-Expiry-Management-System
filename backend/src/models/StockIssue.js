@@ -1,5 +1,4 @@
-import mongoose from 'mongoose';
-
+const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
 const stockIssueItemSchema = new Schema(
@@ -62,6 +61,12 @@ const stockIssueItemSchema = new Schema(
 
 const stockIssueSchema = new Schema(
   {
+    pharmacyId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Pharmacy',
+      required: true,
+      index: true,
+    },
     issueNo: {
       type: String,
       required: true,
@@ -133,6 +138,8 @@ const stockIssueSchema = new Schema(
   }
 );
 
+stockIssueSchema.index({ pharmacyId: 1, createdAt: -1 });
+
 const StockIssue = mongoose.model('StockIssue', stockIssueSchema);
 
-export default StockIssue;
+module.exports = StockIssue;

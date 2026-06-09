@@ -1,6 +1,5 @@
-import Settings from '../models/Settings.js';
-
-export const getSettings = async (pharmacyId) => {
+const Settings = require('../models/Settings.js');
+const getSettings = async (pharmacyId) => {
   let settings = await Settings.findOne({ pharmacyId });
 
   if (!settings) {
@@ -9,12 +8,22 @@ export const getSettings = async (pharmacyId) => {
 
   return settings;
 };
+const updateSettings = async (payload, userId, pharmacyId) => {
+  const updateObj = {};
 
-export const updateSettings = async (payload, userId, pharmacyId) =>
-  Settings.findOneAndUpdate(
+  if (payload.lowStockLimitBoxes !== undefined) updateObj.lowStockLimitBoxes = payload.lowStockLimitBoxes;
+  if (payload.expiryAlertDays !== undefined) updateObj.expiryAlertDays = payload.expiryAlertDays;
+
+  if (payload.fefo_mode !== undefined) updateObj.fefoMode = payload.fefo_mode;
+  if (payload.default_page_size !== undefined) updateObj.defaultPageSize = payload.default_page_size;
+
+  if (payload.fefoMode !== undefined) updateObj.fefoMode = payload.fefoMode;
+  if (payload.defaultPageSize !== undefined) updateObj.defaultPageSize = payload.defaultPageSize;
+
+  return Settings.findOneAndUpdate(
     { pharmacyId },
     {
-      ...payload,
+      ...updateObj,
       pharmacyId,
       updatedBy: userId,
     },
@@ -25,3 +34,6 @@ export const updateSettings = async (payload, userId, pharmacyId) =>
       runValidators: true,
     }
   );
+};
+
+module.exports = { getSettings, updateSettings };

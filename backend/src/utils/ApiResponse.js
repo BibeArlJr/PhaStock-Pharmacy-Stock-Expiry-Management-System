@@ -1,4 +1,4 @@
-export default class ApiResponse {
+class ApiResponse {
   static ok(res, data) {
     return res.status(200).json({ success: true, data });
   }
@@ -7,3 +7,5 @@ export default class ApiResponse {
     return res.status(201).json({ success: true, data });
   }
 }
+
+module.exports = ApiResponse;

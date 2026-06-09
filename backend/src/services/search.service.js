@@ -1,11 +1,20 @@
-import mongoose from 'mongoose';
-
-import Medicine from '../models/Medicine.js';
-import PurchaseReceiptItem from '../models/PurchaseReceiptItem.js';
-
+const mongoose = require('mongoose');
+const Medicine = require('../models/Medicine.js');
+const PurchaseReceiptItem = require('../models/PurchaseReceiptItem.js');
+const ApiError = require('../utils/ApiError.js');
 const toObjectId = (value) => new mongoose.Types.ObjectId(value);
 
-export const receiptSearch = async ({
+const ensurePharmacyId = (pharmacyId) => {
+  if (!pharmacyId) {
+    throw new ApiError(401, 'UNAUTHORIZED', 'Pharmacy identity is missing.');
+  }
+  if (!mongoose.Types.ObjectId.isValid(pharmacyId)) {
+    throw new ApiError(400, 'VALIDATION_ERROR', 'Invalid pharmacy id');
+  }
+  return toObjectId(pharmacyId);
+};
+const receiptSearch = async (
+  {
   supplierId,
   invoiceNumber,
   medicineId,
@@ -15,7 +24,10 @@ export const receiptSearch = async ({
   dateTo,
   page = 1,
   limit = 20,
-}) => {
+  },
+  pharmacyId
+) => {
+  const pharmacyObjectId = ensurePharmacyId(pharmacyId);
   const itemMatch = {};
 
   if (medicineId) {
@@ -70,6 +82,17 @@ export const receiptSearch = async ({
       },
     },
     { $unwind: '$receipt' },
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'receipt.createdBy',
+        foreignField: '_id',
+        as: 'creator',
+        pipeline: [{ $project: { _id: 1, pharmacyId: 1 } }],
+      },
+    },
+    { $addFields: { creator: { $arrayElemAt: ['$creator', 0] } } },
+    { $match: { 'creator.pharmacyId': pharmacyObjectId } },
     {
       $lookup: {
         from: 'suppliers',
@@ -143,7 +166,8 @@ export const receiptSearch = async ({
   };
 };
 
-export const priceHistory = async ({ medicineId, limit = 20 }) => {
+const priceHistory = async (medicineId, pharmacyId, limit = 20) => {
+  const pharmacyObjectId = ensurePharmacyId(pharmacyId);
   const [medicine, historyRows] = await Promise.all([
     Medicine.findById(medicineId, { _id: 1, name: 1, strength: 1 }).lean(),
     PurchaseReceiptItem.aggregate([
@@ -162,6 +186,17 @@ export const priceHistory = async ({ medicineId, limit = 20 }) => {
         },
       },
       { $unwind: '$receipt' },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'receipt.createdBy',
+          foreignField: '_id',
+          as: 'creator',
+          pipeline: [{ $project: { _id: 1, pharmacyId: 1 } }],
+        },
+      },
+      { $addFields: { creator: { $arrayElemAt: ['$creator', 0] } } },
+      { $match: { 'creator.pharmacyId': pharmacyObjectId } },
       {
         $lookup: {
           from: 'suppliers',
@@ -214,3 +249,5 @@ export const priceHistory = async ({ medicineId, limit = 20 }) => {
     history,
   };
 };
+
+module.exports = { receiptSearch, priceHistory };

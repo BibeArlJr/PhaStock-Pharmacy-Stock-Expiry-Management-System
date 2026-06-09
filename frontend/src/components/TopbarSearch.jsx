@@ -146,7 +146,7 @@ export default function TopbarSearch() {
               params: { batch_no: q, page: 1, limit: 5 },
               signal: controller.signal,
             }),
-            api.get('/batches', {
+            api.get('/batch-stocks', {
               params: { q, page: 1, limit: 5 },
               signal: controller.signal,
             }),

@@ -5,15 +5,31 @@ import AsyncCombobox from '@/components/AsyncCombobox';
 import { DATA_TABLE_CLASS, DATA_TABLE_TH_CLASS, DATA_TABLE_TD_CLASS } from '@/components/common/dataTableStyles';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { ChevronDown } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import api from '@/lib/api';
+
+// --- START OF CHANGES ---
+
+// Normalizes a batch object from any source (API, initialData) to a consistent structure.
+const normalizeBatch = (batch) => {
+  const id = batch.id || batch._id;
+  return {
+    id: String(id),
+    medicineId: String(batch.medicineId || batch.medicine_id),
+    batchNo: batch.batchNo || batch.batch_no || batch.batch_no_snapshot || '',
+    expiryDate: batch.expiryDate || batch.expiry_date || batch.expiry_date_snapshot || '',
+    // Ensure availableBoxes is always a number
+    availableBoxes: Number(batch.availableBoxes ?? batch.available_boxes ?? batch.available_after ?? batch.available_before ?? 0),
+  };
+};
 
 const createRow = (seed = {}) => ({
   id: crypto.randomUUID(),
   medicine: seed.medicine || null,
   batches: seed.batches || [],
+  isBatchesLoading: seed.isBatchesLoading || false, // For loading state per row
   batch_stock_id: seed.batch_stock_id || '',
-  batch_no: seed.batch_no || '',
   expiry_date: seed.expiry_date || '',
   available_boxes: seed.available_boxes ?? 0,
   qty_boxes: seed.qty_boxes ?? '',
@@ -29,23 +45,27 @@ const fetchMedicineOptions = async (query, signal) => {
   return rows.map((item) => ({
     label: `${item.name}${item.strength ? ` ${item.strength}` : ''}`,
     value: item.id,
-    raw: item,
   }));
 };
 
-const fetchBatchesForMedicine = async (medicineId) => {
+const fetchBatchesForMedicine = async (medicineId, signal) => {
+  if (!medicineId) return [];
   const response = await api.get('/batch-stocks', {
+    signal,
     params: {
       medicine_id: medicineId,
       expiry_status: 'valid',
-      stock_status: 'in',
+      stock_status: 'all',
       sort: 'expiry',
       page: 1,
-      limit: 50,
+      limit: 100, // Increased limit to fetch all batches
     },
   });
-  return response?.data?.data?.items || [];
+  const items = response?.data?.data?.items || [];
+  // Always normalize data at the source
+  return items.map(normalizeBatch);
 };
+
 
 export default function StockIssueForm({
   mode = 'create',
@@ -66,79 +86,113 @@ export default function StockIssueForm({
     setIssueDate(initialData.issue_date?.slice(0, 10) || new Date().toISOString().slice(0, 10));
     setReference(initialData.reference || '');
     setNotes(initialData.notes || '');
-    const filled = (initialData.items || []).map((item) =>
-      createRow({
+    const filled = (initialData.items || []).map((item) => {
+      const normalized = normalizeBatch(item);
+      return createRow({
         medicine: {
-          value: item.medicine_id,
+          value: normalized.medicineId,
           label: `${item.medicine_name_snapshot || item.medicine_name || ''}${item.strength_snapshot ? ` ${item.strength_snapshot}` : ''}`.trim(),
         },
-        batches: [
-          {
-            _id: item.batch_stock_id,
-            batch_no: item.batch_no_snapshot,
-            expiry_date: item.expiry_date_snapshot,
-            available_boxes: item.available_after ?? item.available_before ?? 0,
-          },
-        ],
-        batch_stock_id: item.batch_stock_id,
-        batch_no: item.batch_no_snapshot,
-        expiry_date: item.expiry_date_snapshot,
-        available_boxes: item.available_after ?? item.available_before ?? 0,
+        // Store the single, relevant batch in the batches array
+        batches: [normalized],
+        batch_stock_id: normalized.id,
+        expiry_date: normalized.expiryDate,
+        available_boxes: normalized.availableBoxes,
         qty_boxes: item.qty_boxes?.toString() || '',
-      })
-    );
+      });
+    });
     setRows(filled.length > 0 ? filled : [createRow()]);
   }, [initialData]);
 
   const totalQty = useMemo(() => rows.reduce((sum, row) => sum + (Number(row.qty_boxes) || 0), 0), [rows]);
 
   const handleMedicineChange = async (index, option) => {
+    // Abort controller to prevent race conditions on rapid changes
+    const abortController = new AbortController();
+
+    // Step 1: Immediately clear previous state and set loading status
     setRows((prev) => {
       const next = [...prev];
+      const oldRow = next[index];
+      if (oldRow.abortController) {
+        oldRow.abortController.abort(); // Abort previous fetch if it's still running
+      }
+
       next[index] = {
-        ...next[index],
-        medicine: option,
-        batch_stock_id: '',
-        batch_no: '',
-        expiry_date: '',
-        available_boxes: 0,
-        batches: [],
-        errors: { ...next[index].errors, medicine: '', batch: '' },
+        ...createRow(), // Reset to a clean row
+        id: oldRow.id, // Preserve the original row ID for React keys
+        medicine: option, // Set the new medicine
+        isBatchesLoading: !!option, // Set loading to true only if a medicine is selected
+        abortController, // Store the controller to be able to abort
       };
       return next;
     });
+
     if (!option?.value) return;
-    const batches = await fetchBatchesForMedicine(option.value);
+
+    // Step 2: Fetch new data
+    try {
+      const batches = await fetchBatchesForMedicine(option.value, abortController.signal);
+      // Step 3: Update the row with new batches and reset loading state
+      setRows((prev) => {
+        const next = [...prev];
+        next[index] = {
+          ...next[index],
+          batches,
+          isBatchesLoading: false,
+        };
+        return next;
+      });
+    } catch (err) {
+      if (err.name !== 'CanceledError') {
+        console.error("Failed to fetch batches:", err);
+        setRows(prev => {
+          const next = [...prev];
+          next[index].isBatchesLoading = false; // Reset loading state on error
+          return next;
+        });
+      }
+    }
+  };
+
+  const handleBatchChange = (index, batchId) => {
     setRows((prev) => {
       const next = [...prev];
       const row = { ...next[index] };
-      row.batches = batches;
-      if (batches.length > 0) {
-        const first = batches[0];
-        row.batch_stock_id = first.id || first._id;
-        row.batch_no = first.batch_no || first.batchNo;
-        row.expiry_date = first.expiry_date || first.expiryDate;
-        row.available_boxes = first.available_boxes ?? first.availableBoxes ?? 0;
+      
+      // Find the selected batch from the *normalized* batches array
+      const batch = row.batches.find((b) => b.id === batchId);
+
+      if (!batch) {
+        // If "Select batch" is chosen, clear dependent fields
+        row.batch_stock_id = '';
+        row.batch_no = '';
+        row.expiry_date = '';
+        row.available_boxes = 0;
+        row.qty_boxes = '';
+        row.errors = { ...row.errors, batch: '' };
+      } else {
+        row.batch_stock_id = batch.id;
+        row.batch_no = batch.batchNo;
+        row.expiry_date = batch.expiryDate;
+        row.available_boxes = batch.availableBoxes;
+        
+        // If available stock is zero, clear quantity
+        if (batch.availableBoxes <= 0) {
+          row.qty_boxes = '';
+        } else if (Number(row.qty_boxes || 0) > batch.availableBoxes) {
+          // If existing qty exceeds new availability, clear it
+          row.qty_boxes = '';
+        }
+        row.errors = { ...row.errors, batch: '' };
       }
+      
       next[index] = row;
       return next;
     });
   };
 
-  const handleBatchChange = (index, value) => {
-    setRows((prev) => {
-      const next = [...prev];
-      const row = { ...next[index] };
-      const batch = row.batches.find((b) => b.id === value || b._id === value);
-      row.batch_stock_id = value || '';
-      row.batch_no = batch?.batch_no ?? batch?.batchNo ?? '';
-      row.expiry_date = batch?.expiry_date ?? batch?.expiryDate ?? '';
-      row.available_boxes = batch?.available_boxes ?? batch?.availableBoxes ?? 0;
-      row.errors = { ...row.errors, batch: '' };
-      next[index] = row;
-      return next;
-    });
-  };
+  // --- END OF CHANGES (remainder of file is the same, but included for completeness) ---
 
   const handleQtyChange = (index, value) => {
     setRows((prev) => {
@@ -219,7 +273,7 @@ export default function StockIssueForm({
             <p className="text-sm text-muted-foreground">{mode === 'edit' ? 'Update existing issue' : 'Create new stock issue'}</p>
           </div>
           <div className="flex gap-2">
-            {mode === 'edit' && (
+            {onCancel && (
               <Button variant="outline" onClick={onCancel}>Cancel</Button>
             )}
             <Button onClick={handleSubmit} disabled={submitting}>
@@ -267,73 +321,92 @@ export default function StockIssueForm({
           </Button>
         </CardHeader>
         <CardContent>
-          <table className={DATA_TABLE_CLASS}>
-            <colgroup>
-              <col style={{ width: '26%' }} />
-              <col style={{ width: '20%' }} />
-              <col style={{ width: '16%' }} />
-              <col style={{ width: '16%' }} />
-              <col style={{ width: '12%' }} />
-              <col style={{ width: '10%' }} />
-            </colgroup>
-            <thead>
-              <tr className="border-b">
-                <th className={`${DATA_TABLE_TH_CLASS} text-left`}>Medicine</th>
-                <th className={`${DATA_TABLE_TH_CLASS} text-center`}>Batch</th>
-                <th className={`${DATA_TABLE_TH_CLASS} text-center`}>Expiry</th>
-                <th className={`${DATA_TABLE_TH_CLASS} text-center`}>Available</th>
-                <th className={`${DATA_TABLE_TH_CLASS} text-center`}>Qty</th>
-                <th className={`${DATA_TABLE_TH_CLASS} text-center`} />
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, index) => (
-                <tr key={row.id} className="border-b align-top">
-                  <td className={`${DATA_TABLE_TD_CLASS} text-left`}>
-                    <AsyncCombobox
-                      value={row.medicine}
-                      onChange={(option) => handleMedicineChange(index, option)}
-                      fetchOptions={fetchMedicineOptions}
-                      placeholder="Select medicine"
-                      searchPlaceholder="Search medicine"
-                    />
-                    {row.errors.medicine && <p className="text-xs text-red-600">{row.errors.medicine}</p>}
-                  </td>
-                  <td className={`${DATA_TABLE_TD_CLASS} text-center`}> 
-                    <select
-                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                      value={row.batch_stock_id}
-                      onChange={(event) => handleBatchChange(index, event.target.value)}
-                    >
-                      <option value="">Select batch</option>
-                      {row.batches.map((batch) => (
-                        <option key={batch._id} value={batch._id}>
-                          {batch.batch_no} — {batch.expiry_date ? new Date(batch.expiry_date).toLocaleDateString() : '—'}
-                        </option>
-                      ))}
-                    </select>
-                    {row.errors.batch && <p className="text-xs text-red-600">{row.errors.batch}</p>}
-                  </td>
-                  <td className={`${DATA_TABLE_TD_CLASS} text-center`}>{row.expiry_date ? new Date(row.expiry_date).toLocaleDateString() : '—'}</td>
-                  <td className={`${DATA_TABLE_TD_CLASS} text-center`}>{row.batch_stock_id ? row.available_boxes : '—'}</td>
-                  <td className={`${DATA_TABLE_TD_CLASS} text-center`}> 
-                    <Input
-                      type="number"
-                      min="1"
-                      value={row.qty_boxes}
-                      onChange={(event) => handleQtyChange(index, event.target.value)}
-                    />
-                    {row.errors.qty && <p className="text-xs text-red-600">{row.errors.qty}</p>}
-                  </td>
-                  <td className={`${DATA_TABLE_TD_CLASS} text-center`}>
-                    <Button variant="ghost" size="icon" onClick={() => removeRow(index)}>
-                      <Trash2 className="h-4 w-4 text-red-600" />
-                    </Button>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className={DATA_TABLE_CLASS} style={{ tableLayout: 'fixed' }}>
+              <colgroup>
+                <col style={{ width: '26%' }} />
+                <col style={{ width: '20%' }} />
+                <col style={{ width: '16%' }} />
+                <col style={{ width: '16%' }} />
+                <col style={{ width: '12%' }} />
+                <col style={{ width: '10%' }} />
+              </colgroup>
+              <thead>
+                <tr className="border-b">
+                  <th className={`${DATA_TABLE_TH_CLASS} text-left`}>Medicine</th>
+                  <th className={`${DATA_TABLE_TH_CLASS} text-center`}>Batch</th>
+                  <th className={`${DATA_TABLE_TH_CLASS} text-center`}>Expiry</th>
+                  <th className={`${DATA_TABLE_TH_CLASS} text-center`}>Available</th>
+                  <th className={`${DATA_TABLE_TH_CLASS} text-center`}>Qty</th>
+                  <th className={`${DATA_TABLE_TH_CLASS} text-center`} />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {rows.map((row, index) => {
+                  const isQtyDisabled = !row.batch_stock_id || row.available_boxes <= 0;
+                  const showNoStockMessage = row.medicine && !row.isBatchesLoading && row.batches.length === 0;
+
+                  return (
+                    <tr key={row.id} className="border-b align-top">
+                      <td className={`${DATA_TABLE_TD_CLASS} text-left`}>
+                        <AsyncCombobox
+                          value={row.medicine}
+                          onChange={(option) => handleMedicineChange(index, option)}
+                          fetchOptions={fetchMedicineOptions}
+                          placeholder="Select medicine"
+                          searchPlaceholder="Search medicine"
+                        />
+                        {row.errors.medicine && <p className="mt-1 text-xs text-red-600">{row.errors.medicine}</p>}
+                      </td>
+                      <td className={`${DATA_TABLE_TD_CLASS} text-center`}>
+                        <div className="relative">
+                          <select
+                            className="appearance-none h-10 w-full rounded-md border border-input bg-background px-3 pr-10 text-sm"
+                            value={row.batch_stock_id}
+                            onChange={(event) => handleBatchChange(index, event.target.value)}
+                            disabled={!row.medicine || row.isBatchesLoading}
+                          >
+                            <option value="">{row.isBatchesLoading ? 'Loading...' : 'Select batch'}</option>
+                            {row.batches.map((batch) => (
+                              <option
+                                key={batch.id}
+                                value={batch.id}
+                              >
+                                {batch.batchNo}
+                              </option>
+                            ))}
+                          </select>
+                          <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                        </div>
+                        {showNoStockMessage && <p className="mt-1 text-xs text-muted-foreground">No stock available for this medicine</p>}
+                        {row.errors.batch && <p className="mt-1 text-xs text-red-600">{row.errors.batch}</p>}
+                      </td>
+                      <td className={`${DATA_TABLE_TD_CLASS} text-center`}>{row.expiry_date ? new Date(row.expiry_date).toLocaleDateString() : '—'}</td>
+                      <td className={`${DATA_TABLE_TD_CLASS} text-center`}>{row.batch_stock_id ? row.available_boxes : '—'}</td>
+                      <td className={`${DATA_TABLE_TD_CLASS} text-center`}> 
+                        <Input
+                          type="number"
+                          min="1"
+                          value={row.qty_boxes}
+                          onChange={(event) => handleQtyChange(index, event.target.value)}
+                          disabled={isQtyDisabled}
+                          placeholder={isQtyDisabled ? '' : 'Enter...'}
+                        />
+                        {row.errors.qty && <p className="mt-1 text-xs text-red-600">{row.errors.qty}</p>}
+                      </td>
+                      <td className={`${DATA_TABLE_TD_CLASS} text-center`}>
+                        <Button variant="ghost" size="icon" onClick={() => removeRow(index)} disabled={rows.length === 1}>
+                          <Trash2 className="h-4 w-4 text-red-600" />
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
           <div className="mt-4 flex justify-end text-sm">
             <div className="rounded-md border border-border px-3 py-2">
               <span className="text-muted-foreground">Total Qty: </span>

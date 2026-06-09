@@ -1,9 +1,14 @@
-import mongoose from 'mongoose';
-
+const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
 const medicineSchema = new Schema(
   {
+    pharmacyId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Pharmacy',
+      required: true,
+      index: true,
+    },
     name: {
       type: String,
       required: true,
@@ -19,6 +24,11 @@ const medicineSchema = new Schema(
       trim: true,
       default: '',
     },
+    notes: {
+      type: String,
+      trim: true,
+      default: '',
+    },
   },
   {
     timestamps: true,
@@ -26,7 +36,11 @@ const medicineSchema = new Schema(
 );
 
 medicineSchema.index({ name: 1 });
+medicineSchema.index({ strength: 1 });
+medicineSchema.index({ category: 1 });
+medicineSchema.index({ name: 1, strength: 1, category: 1 });
+medicineSchema.index({ pharmacyId: 1, name: 1, strength: 1, category: 1 });
 
 const Medicine = mongoose.model('Medicine', medicineSchema);
 
-export default Medicine;
+module.exports = Medicine;

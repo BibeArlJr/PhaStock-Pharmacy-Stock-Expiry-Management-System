@@ -1,19 +1,15 @@
-import { Router } from 'express';
-
-import { NODE_ENV } from '../config/env.js';
-import alertsRoutes from './alerts.routes.js';
-import authRoutes from './auth.routes.js';
-import batchRoutes from './batch.routes.js';
-import batchStockRoutes from './batchStock.routes.js';
-import dashboardRoutes from './dashboard.routes.js';
-import debugRoutes from './debug.routes.js';
-import medicineRoutes from './medicine.routes.js';
-import receiptRoutes from './receipt.routes.js';
-import searchRoutes from './search.routes.js';
-import settingsRoutes from './settings.routes.js';
-import stockIssueRoutes from './stockIssue.routes.js';
-import supplierRoutes from './supplier.routes.js';
-
+const { Router } = require('express');const { NODE_ENV } = require('../config/env.js');
+const alertsRoutes = require('./alerts.routes.js');
+const authRoutes = require('./auth.routes.js');
+const batchStockRoutes = require('./batchStock.routes.js');
+const dashboardRoutes = require('./dashboard.routes.js');
+const debugRoutes = require('./debug.routes.js');
+const medicineRoutes = require('./medicine.routes.js');
+const receiptRoutes = require('./receipt.routes.js');
+const searchRoutes = require('./search.routes.js');
+const settingsRoutes = require('./settings.routes.js');
+const stockIssueRoutes = require('./stockIssue.routes.js');
+const supplierRoutes = require('./supplier.routes.js');
 const router = Router();
 
 router.get('/health', (req, res) => {
@@ -26,7 +22,6 @@ router.use('/medicines', medicineRoutes);
 router.use('/suppliers', supplierRoutes);
 router.use('/purchase-receipts', receiptRoutes);
 router.use('/receipts', receiptRoutes);
-router.use('/batches', batchRoutes);
 router.use('/batch-stocks', batchStockRoutes);
 router.use('/stock-issues', stockIssueRoutes);
 router.use('/dashboard', dashboardRoutes);
@@ -34,4 +29,4 @@ router.use('/alerts', alertsRoutes);
 router.use('/debug', debugRoutes);
 router.use('/', searchRoutes);
 
-export default router;
+module.exports = router;

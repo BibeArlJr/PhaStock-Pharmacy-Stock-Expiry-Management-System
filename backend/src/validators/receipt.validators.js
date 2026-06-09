@@ -1,5 +1,4 @@
-import { z } from 'zod';
-
+const { z } = require('zod');
 const objectIdRegex = /^[a-fA-F0-9]{24}$/;
 
 const paginationSchema = z.object({
@@ -42,21 +41,21 @@ const receiptUpsertSchema = z.object({
   discount_amount: z.coerce.number().min(0).default(0),
   items: z.array(receiptItemSchema).min(1),
 });
-
-export const createReceiptSchema = receiptUpsertSchema;
-export const updateReceiptSchema = receiptUpsertSchema;
-
-export const receiptListQuerySchema = paginationSchema.extend({
+const createReceiptSchema = receiptUpsertSchema;
+const updateReceiptSchema = receiptUpsertSchema;
+const receiptListQuerySchema = paginationSchema.extend({
+  q: optionalTrimmedString,
   supplier_id: z.string().regex(objectIdRegex, 'Invalid supplier_id format').optional(),
   invoice_number: optionalTrimmedString,
+  batch_no: optionalTrimmedString,
   date_from: z.coerce.date().optional(),
   date_to: z.coerce.date().optional(),
 });
-
-export const receiptIdParamSchema = z.object({
+const receiptIdParamSchema = z.object({
   id: z.string().regex(objectIdRegex, 'Invalid id format'),
 });
-
-export const receiptBulkDeleteSchema = z.object({
+const receiptBulkDeleteSchema = z.object({
   ids: z.array(z.string().regex(objectIdRegex, 'Invalid id format')).min(1),
 });
+
+module.exports = { createReceiptSchema, updateReceiptSchema, receiptListQuerySchema, receiptIdParamSchema, receiptBulkDeleteSchema };

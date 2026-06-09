@@ -18,13 +18,30 @@ const titleMap = {
   '/batch-stock': 'Batch Stock',
   '/stock-issue': 'Stock Issue',
   '/alerts': 'Alerts',
-  '/receipt-search': 'Receipt Search',
+  '/medicines/new': 'Add Medicine',
+  '/suppliers/new': 'Add Supplier',
   '/settings': 'Settings',
 };
 
 const getPageTitle = (pathname) => {
   if (pathname.startsWith('/receipts/') && pathname !== '/receipts/new') {
     return 'Receipt Detail';
+  }
+
+  if (pathname === '/medicines/new') {
+    return 'Add Medicine';
+  }
+
+  if (pathname.startsWith('/medicines/') && pathname.endsWith('/edit')) {
+    return 'Edit Medicine';
+  }
+
+  if (pathname === '/suppliers/new') {
+    return 'Add Supplier';
+  }
+
+  if (pathname.startsWith('/suppliers/') && pathname.endsWith('/edit')) {
+    return 'Edit Supplier';
   }
 
   return titleMap[pathname] || 'PhaStock';

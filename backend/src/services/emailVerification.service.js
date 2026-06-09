@@ -1,10 +1,7 @@
-import crypto from 'crypto';
-
-import EmailVerification from '../models/EmailVerification.js';
-import User from '../models/User.js';
-import ApiError from '../utils/ApiError.js';
-import { sendVerificationEmail } from '../utils/mailer.js';
-
+const crypto = require('crypto');const EmailVerification = require('../models/EmailVerification.js');
+const User = require('../models/User.js');
+const ApiError = require('../utils/ApiError.js');
+const { sendVerificationEmail } = require('../utils/mailer.js');
 const TTL_MS = 15 * 60 * 1000;
 
 const generateToken = () => crypto.randomBytes(32).toString('hex');
@@ -21,8 +18,7 @@ const ensureActiveVerification = (verification) => {
     throw new ApiError(400, 'VERIFICATION_EXPIRED', 'Verification expired');
   }
 };
-
-export const createVerificationForUser = async (userId) => {
+const createVerificationForUser = async (userId) => {
   const token = generateToken();
   const code = generateCode();
   const expiresAt = new Date(Date.now() + TTL_MS);
@@ -41,14 +37,12 @@ export const createVerificationForUser = async (userId) => {
     code,
   };
 };
-
-export const getVerificationByToken = async (token) => {
+const getVerificationByToken = async (token) => {
   const verification = await EmailVerification.findOne({ token });
   ensureActiveVerification(verification);
   return verification;
 };
-
-export const getVerificationByTokenAnyState = async (token) => {
+const getVerificationByTokenAnyState = async (token) => {
   const verification = await EmailVerification.findOne({ token });
 
   if (!verification || !verification.userId) {
@@ -57,8 +51,7 @@ export const getVerificationByTokenAnyState = async (token) => {
 
   return verification;
 };
-
-export const findLatestPendingVerificationByEmail = async (email) => {
+const findLatestPendingVerificationByEmail = async (email) => {
   const normalizedEmail = email.trim().toLowerCase();
   const user = await User.findOne({ email: normalizedEmail }, { _id: 1 }).lean();
 
@@ -79,8 +72,7 @@ export const findLatestPendingVerificationByEmail = async (email) => {
 
   return verification;
 };
-
-export const resendWithOptionalEmailUpdate = async ({ token, newEmail }) => {
+const resendWithOptionalEmailUpdate = async ({ token, newEmail }) => {
   const verification = await getVerificationByTokenAnyState(token);
   const user = await User.findById(verification.userId);
 
@@ -130,8 +122,7 @@ export const resendWithOptionalEmailUpdate = async ({ token, newEmail }) => {
     expiresAt,
   };
 };
-
-export const confirm = async ({ token, code }) => {
+const confirm = async ({ token, code }) => {
   const verification = await getVerificationByToken(token);
 
   if (verification.code !== code) {
@@ -154,8 +145,7 @@ export const confirm = async ({ token, code }) => {
     message: 'Email verified',
   };
 };
-
-export const issueFreshVerificationForUser = async (user) => {
+const issueFreshVerificationForUser = async (user) => {
   await EmailVerification.updateMany(
     {
       userId: user._id,
@@ -174,3 +164,5 @@ export const issueFreshVerificationForUser = async (user) => {
     expiresAt: created.expiresAt,
   };
 };
+
+module.exports = { createVerificationForUser, getVerificationByToken, getVerificationByTokenAnyState, findLatestPendingVerificationByEmail, resendWithOptionalEmailUpdate, confirm, issueFreshVerificationForUser };

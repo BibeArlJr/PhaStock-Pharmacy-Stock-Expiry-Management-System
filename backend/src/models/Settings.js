@@ -1,5 +1,4 @@
-import mongoose from 'mongoose';
-
+const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
 const settingsSchema = new Schema(
@@ -20,6 +19,16 @@ const settingsSchema = new Schema(
       default: 30,
       min: 0,
     },
+    fefoMode: {
+      type: Boolean,
+      default: true,
+    },
+    defaultPageSize: {
+      type: Number,
+      default: 20,
+      min: 5,
+      max: 100,
+    },
     updatedBy: {
       type: Schema.Types.ObjectId,
       ref: 'User',
@@ -33,4 +42,4 @@ const settingsSchema = new Schema(
 
 const Settings = mongoose.model('Settings', settingsSchema);
 
-export default Settings;
+module.exports = Settings;

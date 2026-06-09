@@ -1,17 +1,9 @@
-import { Router } from 'express';
-
-import * as AuthController from '../controllers/auth.controller.js';
-import { requireAuth } from '../middlewares/auth.js';
-import { validate } from '../middlewares/validate.js';
-import {
-  loginSchema,
-  signupPharmacySchema,
-  verificationConfirmBodySchema,
-  verificationInfoQuerySchema,
-  verificationResendAliasBodySchema,
-  verificationResendBodySchema,
-} from '../validators/auth.validators.js';
-
+const { Router } = require('express');
+const AuthController = require('../controllers/auth.controller.js');
+const { forgotPassword, resetPassword } = require('../controllers/passwordReset.controller.js');
+const { requireAuth } = require('../middlewares/auth.js');
+const { validate } = require('../middlewares/validate.js');
+const { loginSchema, signupPharmacySchema, verificationConfirmBodySchema, verificationInfoQuerySchema, verificationResendBodySchema, forgotPasswordSchema, resetPasswordSchema } = require('../validators/auth.validators.js');
 const router = Router();
 
 router.post('/signup-pharmacy', validate({ body: signupPharmacySchema }), AuthController.signupPharmacy);
@@ -28,18 +20,12 @@ router.post(
   AuthController.confirmVerification
 );
 
-router.post(
-  '/resend-verification-code',
-  validate({ body: verificationResendAliasBodySchema }),
-  AuthController.resendVerificationAlias
-);
-router.post(
-  '/verify-email-code',
-  validate({ body: verificationConfirmBodySchema }),
-  AuthController.confirmVerification
-);
-
 router.post('/login', validate({ body: loginSchema }), AuthController.login);
+
+router.post('/forgot-password', forgotPassword);
+router.post('/reset-password', validate({ body: resetPasswordSchema }), AuthController.resetPassword);
+router.put('/reset-password/:token', resetPassword);
+
 router.get('/me', requireAuth, AuthController.getMe);
 
-export default router;
+module.exports = router;

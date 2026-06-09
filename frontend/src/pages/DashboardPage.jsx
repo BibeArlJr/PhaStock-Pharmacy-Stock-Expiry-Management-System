@@ -62,7 +62,6 @@ export default function DashboardPage() {
     { label: 'Add Receipt', to: '/receipts/new' },
     { label: 'Stock Issue', to: '/stock-issue' },
     { label: 'Batch Stock', to: '/batch-stock' },
-    { label: 'Receipt Search', to: '/receipt-search' },
   ];
 
   const kpis = [

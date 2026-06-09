@@ -117,15 +117,14 @@ export default function StockIssueDetailsDrawer({ id, open, onClose, onVoidSucce
   const openMedicine = (medicineId) => {
     if (!medicineId) return;
     onClose?.();
-    // adjust later if your real route is different
-    navigate(`/medicines/${medicineId}`);
+    navigate(`/medicines/${medicineId}/edit`);
   };
 
   const openBatch = (batchStockId) => {
     if (!batchStockId) return;
     onClose?.();
-    // adjust later if your real route is different
-    navigate(`/batch-stock/${batchStockId}`);
+    // No dedicated batch details route exists; take user to batch stock list.
+    navigate('/batch-stock');
   };
 
   const renderError = () => (

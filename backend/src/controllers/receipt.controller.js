@@ -1,8 +1,7 @@
-import * as ReceiptService from '../services/receipt.service.js';
-import ApiError from '../utils/ApiError.js';
-import ApiResponse from '../utils/ApiResponse.js';
-import asyncHandler from '../utils/asyncHandler.js';
-
+const ReceiptService = require('../services/receipt.service.js');
+const ApiError = require('../utils/ApiError.js');
+const ApiResponse = require('../utils/ApiResponse.js');
+const asyncHandler = require('../utils/asyncHandler.js');
 const mapReceiptListItem = (item) => ({
   id: item._id.toString(),
   supplier: item.supplier
@@ -91,8 +90,7 @@ const mapReceiptPayload = (body) => ({
     mrp: item.mrp,
   })),
 });
-
-export const createReceipt = asyncHandler(async (req, res) => {
+const createReceipt = asyncHandler(async (req, res) => {
   const payload = {
     ...mapReceiptPayload(req.body),
     userId: req.user.id,
@@ -106,8 +104,7 @@ export const createReceipt = asyncHandler(async (req, res) => {
     batch_updates: result.batchUpdates,
   });
 });
-
-export const updateReceipt = asyncHandler(async (req, res) => {
+const updateReceipt = asyncHandler(async (req, res) => {
   const result = await ReceiptService.updateReceipt({
     id: req.params.id,
     ...mapReceiptPayload(req.body),
@@ -119,8 +116,7 @@ export const updateReceipt = asyncHandler(async (req, res) => {
     message: 'Receipt updated',
   });
 });
-
-export const deleteReceipt = asyncHandler(async (req, res) => {
+const deleteReceipt = asyncHandler(async (req, res) => {
   const result = await ReceiptService.deleteReceipt({
     id: req.params.id,
     pharmacyId: req.user?.pharmacy?.id,
@@ -131,8 +127,7 @@ export const deleteReceipt = asyncHandler(async (req, res) => {
     message: 'Receipt deleted',
   });
 });
-
-export const deleteReceiptsBulk = asyncHandler(async (req, res) => {
+const deleteReceiptsBulk = asyncHandler(async (req, res) => {
   const result = await ReceiptService.deleteReceiptsBulk({
     ids: req.body.ids,
     pharmacyId: req.user?.pharmacy?.id,
@@ -144,12 +139,13 @@ export const deleteReceiptsBulk = asyncHandler(async (req, res) => {
     message: 'Receipts deleted',
   });
 });
-
-export const listReceipts = asyncHandler(async (req, res) => {
+const listReceipts = asyncHandler(async (req, res) => {
   const result = await ReceiptService.listReceipts({
     pharmacyId: req.user?.pharmacy?.id,
     supplierId: req.query.supplier_id,
     invoiceNumber: req.query.invoice_number,
+    q: req.query.q,
+    batchNo: req.query.batch_no,
     dateFrom: req.query.date_from,
     dateTo: req.query.date_to,
     page: req.query.page,
@@ -163,8 +159,7 @@ export const listReceipts = asyncHandler(async (req, res) => {
     items: result.items.map(mapReceiptListItem),
   });
 });
-
-export const getReceiptDetail = asyncHandler(async (req, res) => {
+const getReceiptDetail = asyncHandler(async (req, res) => {
   const detail = await ReceiptService.getReceiptDetail(req.params.id, req.user?.pharmacy?.id);
 
   if (!detail) {
@@ -176,3 +171,5 @@ export const getReceiptDetail = asyncHandler(async (req, res) => {
     items: detail.items.map(mapReceiptItem),
   });
 });
+
+module.exports = { createReceipt, updateReceipt, deleteReceipt, deleteReceiptsBulk, listReceipts, getReceiptDetail };

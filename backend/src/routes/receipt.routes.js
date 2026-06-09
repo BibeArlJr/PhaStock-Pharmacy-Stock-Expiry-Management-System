@@ -1,16 +1,8 @@
-import { Router } from 'express';
-
-import * as ReceiptController from '../controllers/receipt.controller.js';
-import { requireAuth } from '../middlewares/auth.js';
-import { validate } from '../middlewares/validate.js';
-import {
-  receiptBulkDeleteSchema,
-  createReceiptSchema,
-  receiptIdParamSchema,
-  receiptListQuerySchema,
-  updateReceiptSchema,
-} from '../validators/receipt.validators.js';
-
+const { Router } = require('express');
+const ReceiptController = require('../controllers/receipt.controller.js');
+const { requireAuth } = require('../middlewares/auth.js');
+const { validate } = require('../middlewares/validate.js');
+const { receiptBulkDeleteSchema, createReceiptSchema, receiptIdParamSchema, receiptListQuerySchema, updateReceiptSchema } = require('../validators/receipt.validators.js');
 const router = Router();
 
 router.use(requireAuth);
@@ -26,4 +18,4 @@ router.put(
 );
 router.delete('/:id', validate({ params: receiptIdParamSchema }), ReceiptController.deleteReceipt);
 
-export default router;
+module.exports = router;

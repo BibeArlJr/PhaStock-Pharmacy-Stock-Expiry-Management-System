@@ -1,11 +1,10 @@
-import cors from 'cors';
-import express from 'express';
-import morgan from 'morgan';
-
-import { CORS_ORIGIN_ARRAY, NODE_ENV } from './config/env.js';
-import { errorHandler } from './middlewares/errorHandler.js';
-import routes from './routes/index.js';
-
+const cors = require('cors');
+const express = require('express');
+const mongoSanitize = require('express-mongo-sanitize');
+const morgan = require('morgan');
+const { CORS_ORIGIN_ARRAY, NODE_ENV } = require('./config/env.js');
+const { errorHandler } = require('./middlewares/errorHandler.js');
+const routes = require('./routes/index.js');
 const app = express();
 app.set('etag', false);
 
@@ -40,6 +39,7 @@ app.set('trust proxy', 1);
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 app.use(express.json());
+app.use(mongoSanitize());
 app.use(morgan('dev'));
 app.use('/api', (req, res, next) => {
   res.setHeader('Cache-Control', 'no-store');
@@ -54,4 +54,4 @@ app.use('/api/v1', routes);
 
 app.use(errorHandler);
 
-export default app;
+module.exports = app;

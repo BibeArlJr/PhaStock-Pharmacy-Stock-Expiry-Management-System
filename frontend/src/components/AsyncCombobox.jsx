@@ -151,23 +151,23 @@ export default function AsyncCombobox({
           ) : null}
 
           {!isLoading
-            ? visibleItems.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => {
-                    onChange(item);
-                    setQuery(item.label);
-                    setOpen(false);
-                  }}
-                  className="block w-full px-3 py-2 text-left hover:bg-muted"
-                >
-                  <div className="truncate text-sm text-foreground">{item.label}</div>
-                  {item.subLabel ? (
-                    <div className="truncate text-xs text-muted-foreground">{item.subLabel}</div>
-                  ) : null}
-                </button>
-              ))
+          ? visibleItems.map((item, idx) => (
+              <button
+                key={item.value ?? item.id ?? `${item.label}-${idx}`}
+                type="button"
+                onClick={() => {
+                  onChange(item);
+                  setQuery(item.label);
+                  setOpen(false);
+                }}
+                className="block w-full px-3 py-2 text-left hover:bg-muted"
+              >
+                <div className="truncate text-sm text-foreground">{item.label}</div>
+                {item.subLabel ? (
+                  <div className="truncate text-xs text-muted-foreground">{item.subLabel}</div>
+                ) : null}
+              </button>
+            ))
             : null}
 
           {hasCreateAction ? (

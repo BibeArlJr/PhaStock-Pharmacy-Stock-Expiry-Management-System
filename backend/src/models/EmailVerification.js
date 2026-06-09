@@ -1,5 +1,4 @@
-import mongoose from 'mongoose';
-
+const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
 const emailVerificationSchema = new Schema(
@@ -36,4 +35,4 @@ emailVerificationSchema.index({ expiresAt: 1 });
 
 const EmailVerification = mongoose.model('EmailVerification', emailVerificationSchema);
 
-export default EmailVerification;
+module.exports = EmailVerification;

@@ -8,16 +8,22 @@ import DashboardPage from '@/pages/DashboardPage';
 import ForgotPasswordPage from '@/pages/ForgotPasswordPage';
 import LoginPage from '@/pages/LoginPage';
 import MedicinesPage from '@/pages/MedicinesPage';
+import MedicineEditPage from '@/pages/MedicineEditPage';
+import MedicineNewPage from '@/pages/MedicineNewPage';
+import ResetPasswordPage from '@/pages/ResetPasswordPage';
 import ReceiptDetailPage from '@/pages/ReceiptDetailPage';
 import ReceiptNewPage from '@/pages/ReceiptNewPage';
 import ReceiptsPage from '@/pages/ReceiptsPage';
-import ReceiptSearchPage from '@/pages/ReceiptSearchPage';
 import SettingsPage from '@/pages/SettingsPage';
 import SignupPage from '@/pages/SignupPage';
+import StockIssueEditPage from '@/pages/StockIssueEditPage';
 import StockIssueNewPage from '@/pages/StockIssueNewPage';
 import StockIssuePage from '@/pages/StockIssuePage';
 import SuppliersPage from '@/pages/SuppliersPage';
+import SupplierEditPage from '@/pages/SupplierEditPage';
+import SupplierNewPage from '@/pages/SupplierNewPage';
 import VerifyEmailPage from '@/pages/VerifyEmailPage';
+import ProfilePage from '@/pages/ProfilePage';
 
 export default function App() {
   return (
@@ -26,6 +32,7 @@ export default function App() {
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
 
       <Route
         element={
@@ -37,15 +44,20 @@ export default function App() {
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/medicines" element={<MedicinesPage />} />
         <Route path="/suppliers" element={<SuppliersPage />} />
+        <Route path="/suppliers/new" element={<SupplierNewPage />} />
+        <Route path="/suppliers/:id/edit" element={<SupplierEditPage />} />
+        <Route path="/medicines/new" element={<MedicineNewPage />} />
+        <Route path="/medicines/:id/edit" element={<MedicineEditPage />} />
         <Route path="/receipts" element={<ReceiptsPage />} />
         <Route path="/receipts/new" element={<ReceiptNewPage />} />
         <Route path="/receipts/:id" element={<ReceiptDetailPage />} />
         <Route path="/batch-stock" element={<BatchStockPage />} />
         <Route path="/stock-issue" element={<StockIssuePage />} />
         <Route path="/stock-issue/new" element={<StockIssueNewPage />} />
+        <Route path="/stock-issue/:id/edit" element={<StockIssueEditPage />} />
         <Route path="/alerts" element={<AlertsPage />} />
-        <Route path="/receipt-search" element={<ReceiptSearchPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
 
         <Route path="/purchase-receipts/new" element={<Navigate to="/receipts/new" replace />} />
         <Route path="/purchase-receipts/:id" element={<Navigate to="/receipts" replace />} />

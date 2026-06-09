@@ -1,32 +1,26 @@
-import { z } from 'zod';
-
+const { z } = require('zod');
 const phoneRegex = /^\+?[0-9]{7,15}$/;
 const tokenSchema = z.string().trim().min(10);
 const codeSchema = z.string().regex(/^\d{6}$/);
-
-export const loginSchema = z.object({
+const loginSchema = z.object({
   identifier: z.string().trim().min(1),
   password: z.string().min(1),
 });
-
-export const signupPharmacySchema = z.object({
+const signupPharmacySchema = z.object({
   pharmacyName: z.string().trim().min(1),
   ownerFullName: z.string().trim().min(1),
   email: z.string().trim().email(),
   phone: z.string().trim().regex(phoneRegex, 'Phone format is invalid'),
   password: z.string().min(6),
 });
-
-export const verificationInfoQuerySchema = z.object({
+const verificationInfoQuerySchema = z.object({
   token: tokenSchema,
 });
-
-export const verificationResendBodySchema = z.object({
+const verificationResendBodySchema = z.object({
   token: tokenSchema,
   email: z.string().trim().email().optional(),
 });
-
-export const verificationResendAliasBodySchema = z
+const verificationResendAliasBodySchema = z
   .object({
     token: tokenSchema.optional(),
     email: z.string().trim().email().optional(),
@@ -35,8 +29,16 @@ export const verificationResendAliasBodySchema = z
     message: 'token or email is required',
     path: ['token'],
   });
-
-export const verificationConfirmBodySchema = z.object({
+const verificationConfirmBodySchema = z.object({
   token: tokenSchema,
   code: codeSchema,
 });
+const forgotPasswordSchema = z.object({
+  email: z.string().trim().email(),
+});
+const resetPasswordSchema = z.object({
+  token: tokenSchema,
+  newPassword: z.string().min(6),
+});
+
+module.exports = { loginSchema, signupPharmacySchema, verificationInfoQuerySchema, verificationResendBodySchema, verificationResendAliasBodySchema, verificationConfirmBodySchema, forgotPasswordSchema, resetPasswordSchema };

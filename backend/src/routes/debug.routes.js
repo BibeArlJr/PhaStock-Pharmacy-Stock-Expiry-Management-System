@@ -1,10 +1,10 @@
-import { Router } from 'express';
-
-import { getBatchStockCountDebug } from '../controllers/debug.controller.js';
-import { requireAuth } from '../middlewares/auth.js';
-
+const { Router } = require('express');const { NODE_ENV } = require('../config/env.js');
+const { getBatchStockCountDebug } = require('../controllers/debug.controller.js');
+const { requireAuth } = require('../middlewares/auth.js');
 const router = Router();
 
-router.get('/batch-stock-count', requireAuth, getBatchStockCountDebug);
+if (NODE_ENV === 'development') {
+  router.get('/batch-stock-count', requireAuth, getBatchStockCountDebug);
+}
 
-export default router;
+module.exports = router;

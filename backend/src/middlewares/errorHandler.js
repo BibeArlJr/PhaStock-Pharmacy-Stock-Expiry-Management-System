@@ -1,6 +1,5 @@
-import ApiError from '../utils/ApiError.js';
-
-export const errorHandler = (err, req, res, next) => {
+const ApiError = require('../utils/ApiError.js');
+const errorHandler = (err, req, res, next) => {
   if (err instanceof ApiError) {
     return res.status(err.statusCode).json({
       success: false,
@@ -27,3 +26,5 @@ export const errorHandler = (err, req, res, next) => {
     message: 'Something went wrong.',
   });
 };
+
+module.exports = { errorHandler };

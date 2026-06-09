@@ -1,11 +1,8 @@
-import mongoose from 'mongoose';
-
-import AuditLog from '../models/AuditLog.js';
-import BatchStock from '../models/BatchStock.js';
-import Medicine from '../models/Medicine.js';
-import StockIssue from '../models/StockIssue.js';
-import ApiError from '../utils/ApiError.js';
-
+const mongoose = require('mongoose');const AuditLog = require('../models/AuditLog.js');
+const BatchStock = require('../models/BatchStock.js');
+const Medicine = require('../models/Medicine.js');
+const StockIssue = require('../models/StockIssue.js');
+const ApiError = require('../utils/ApiError.js');
 const pad = (value, length) => value.toString().padStart(length, '0');
 
 const generateIssueNo = async () => {
@@ -34,12 +31,34 @@ const logAudit = async ({ action, entity, entityId, metadata, userId, session })
   );
 };
 
-const ensureBatch = async ({ batchStockId, session }) => {
-  const batch = await BatchStock.findById(batchStockId)
+const toObjectId = (value) => new mongoose.Types.ObjectId(value);
+
+const ensurePharmacyId = (pharmacyId) => {
+  if (!pharmacyId) {
+    throw new ApiError(401, 'UNAUTHORIZED', 'Pharmacy identity is missing.');
+  }
+  if (!mongoose.Types.ObjectId.isValid(pharmacyId)) {
+    throw new ApiError(400, 'VALIDATION_ERROR', 'Invalid pharmacy id');
+  }
+  return toObjectId(pharmacyId);
+};
+
+const ensureIssueBelongsToPharmacy = async ({ issueId, pharmacyId, session }) => {
+  const pharmacyObjectId = ensurePharmacyId(pharmacyId);
+  const issue = await StockIssue.findOne({ _id: issueId, pharmacyId: pharmacyObjectId }).session(session);
+  if (!issue) {
+    throw new ApiError(404, 'NOT_FOUND', 'Stock issue not found');
+  }
+  return issue;
+};
+
+const ensureBatchBelongsToPharmacy = async ({ batchStockId, pharmacyId, session }) => {
+  const pharmacyObjectId = ensurePharmacyId(pharmacyId);
+  const batch = await BatchStock.findOne({ _id: batchStockId, pharmacyId: pharmacyObjectId })
     .session(session)
     .select('_id medicineId pack batchNo expiryDate availableBoxes');
   if (!batch) {
-    throw new ApiError(404, 'BATCH_NOT_FOUND', 'Batch stock not found');
+    throw new ApiError(404, 'BATCH_NOT_FOUND', 'Batch not found or unauthorized');
   }
   return batch;
 };
@@ -65,20 +84,43 @@ const adjustBatchStock = async ({ batchId, qty, session }) => {
   return updated;
 };
 
-export const createStockIssue = async ({ issueDate, reference, notes, items, fromStoreId, toStoreId }, user) => {
+const normalizeIssueStatusForClient = (status) => {
+  const raw = String(status ?? 'ACTIVE').toUpperCase();
+  if (raw === 'VOID') return 'voided';
+  return raw.toLowerCase();
+};
+const createStockIssue = async (
+  { issueDate, reference, notes, items, fromStoreId, toStoreId },
+  pharmacyId,
+  user
+) => {
   if (!Array.isArray(items) || items.length === 0) {
     throw new ApiError(400, 'VALIDATION_ERROR', 'At least one item is required');
   }
+
+  const pharmacyObjectId = ensurePharmacyId(pharmacyId);
 
   const session = await mongoose.startSession();
   try {
     session.startTransaction();
 
+    // Preflight: ensure every referenced BatchStock belongs to this pharmacy.
+    const batchStockIds = [...new Set((items || []).map((item) => item?.batch_stock_id).filter(Boolean))];
+    for (const batchStockId of batchStockIds) {
+      const batch = await BatchStock.findOne({ _id: batchStockId, pharmacyId: pharmacyObjectId })
+        .session(session)
+        .select('_id')
+        .lean();
+      if (!batch) {
+        throw new Error(`BatchStock ${batchStockId} not found or does not belong to this pharmacy`);
+      }
+    }
+
     const sanitizedItems = [];
     let totalQty = 0;
     let totalAmount = 0;
 
-  for (const item of items) {
+    for (const item of items) {
       if (!item.batch_stock_id) {
         throw new ApiError(400, 'VALIDATION_ERROR', 'Batch stock id is required');
       }
@@ -87,7 +129,7 @@ export const createStockIssue = async ({ issueDate, reference, notes, items, fro
         throw new ApiError(400, 'VALIDATION_ERROR', 'Quantity must be greater than zero');
       }
 
-      const batch = await ensureBatch({ batchStockId: item.batch_stock_id, session });
+      const batch = await ensureBatchBelongsToPharmacy({ batchStockId: item.batch_stock_id, pharmacyId, session });
       if (batch.expiryDate < new Date()) {
         throw new ApiError(400, 'BATCH_EXPIRED', 'Cannot issue from an expired batch');
       }
@@ -124,6 +166,7 @@ export const createStockIssue = async ({ issueDate, reference, notes, items, fro
     const [createdDoc] = await StockIssue.create(
       [
         {
+          pharmacyId: pharmacyObjectId,
           issueNo,
           issueDate: issueDate ? new Date(issueDate) : new Date(),
           reference,
@@ -165,8 +208,7 @@ export const createStockIssue = async ({ issueDate, reference, notes, items, fro
     session.endSession();
   }
 };
-
-export const voidStockIssue = async ({ id, reason }, user, sessionOverride) => {
+const voidStockIssue = async ({ id, reason }, pharmacyId, user, sessionOverride) => {
   const session = sessionOverride || (await mongoose.startSession());
   let localSession = Boolean(sessionOverride);
 
@@ -175,15 +217,13 @@ export const voidStockIssue = async ({ id, reason }, user, sessionOverride) => {
       session.startTransaction();
     }
 
-    const issue = await StockIssue.findById(id).session(session);
-    if (!issue) {
-      throw new ApiError(404, 'NOT_FOUND', 'Stock issue not found');
-    }
+    const issue = await ensureIssueBelongsToPharmacy({ issueId: id, pharmacyId, session });
     if (issue.status === 'VOID') {
       throw new ApiError(400, 'ALREADY_VOIDED', 'Stock issue already voided');
     }
 
     for (const item of issue.items) {
+      await ensureBatchBelongsToPharmacy({ batchStockId: item.batchStockId, pharmacyId, session });
       await BatchStock.findByIdAndUpdate(
         item.batchStockId,
         { $inc: { availableBoxes: item.qtyBoxes } },
@@ -225,16 +265,20 @@ export const voidStockIssue = async ({ id, reason }, user, sessionOverride) => {
     }
   }
 };
-
-export const fefoSuggest = async ({ medicineId }) => {
+const fefoSuggest = async ({ medicineId, pharmacyId }) => {
   const now = new Date();
   const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  const pharmacyObjectId = pharmacyId ? ensurePharmacyId(pharmacyId) : null;
+
+  const batchMatch = {
+    medicineId,
+    expiryDate: { $gt: todayEnd },
+    availableBoxes: { $gt: 0 },
+    ...(pharmacyObjectId ? { pharmacyId: pharmacyObjectId } : {}),
+  };
+
   const rows = await BatchStock.find(
-    {
-      medicineId,
-      expiryDate: { $gt: todayEnd },
-      availableBoxes: { $gt: 0 },
-    },
+    batchMatch,
     {
       _id: 1,
       batchNo: 1,
@@ -260,8 +304,7 @@ export const fefoSuggest = async ({ medicineId }) => {
     alternatives,
   };
 };
-
-export const voidStockIssuesBulk = async ({ ids, reason }, user) => {
+const voidStockIssuesBulk = async ({ ids, reason }, user) => {
   if (!Array.isArray(ids) || ids.length === 0) {
     throw new ApiError(400, 'VALIDATION_ERROR', 'At least one id is required');
   }
@@ -274,7 +317,7 @@ export const voidStockIssuesBulk = async ({ ids, reason }, user) => {
 
     for (const id of ids) {
       try {
-        await voidStockIssue({ id, reason }, user, session);
+        await voidStockIssue({ id, reason }, user?.pharmacy?.id || null, user, session);
         results.voided += 1;
       } catch (error) {
         results.errors.push({ id, message: error.message });
@@ -294,11 +337,22 @@ export const voidStockIssuesBulk = async ({ ids, reason }, user) => {
     session.endSession();
   }
 };
+const listStockIssues = async ({ pharmacyId, page = 1, limit = 20, status, q, dateFrom, dateTo }) => {
+  // pharmacyId is required for tenant isolation; support legacy records via creator pharmacy inference.
+  const pharmacyObjectId = ensurePharmacyId(pharmacyId);
 
-export const listStockIssues = async ({ page = 1, limit = 20, status, q, dateFrom, dateTo }) => {
+  if (status) {
+    // Normalize incoming filter (frontend uses "voided")
+    status = String(status).toUpperCase();
+    // Map 'VOIDED' to 'VOID' to match schema enum
+    if (status === 'VOIDED') status = 'VOID';
+  }
+
   const match = {};
+  match.pharmacyId = pharmacyObjectId;
   if (status && status !== 'all') {
-    match.status = status.toUpperCase();
+    const normalized = String(status).toLowerCase();
+    match.status = normalized === 'voided' ? 'VOID' : normalized.toUpperCase();
   }
 
   if (q) {
@@ -338,40 +392,25 @@ export const listStockIssues = async ({ page = 1, limit = 20, status, q, dateFro
     { $sort: { issueDate: -1, _id: -1 } },
     {
       $facet: {
-        items: [
-          { $skip: (page - 1) * limit },
-          { $limit: limit },
-        {
-          $project: {
-            _id: 1,
-            issueNo: 1,
-            issueDate: 1,
-            status: 1,
-            totalQty: 1,
-            reference: 1,
-            itemsCount: 1,
-            createdByUser: 1,
-            items: { $slice: ['$items', 4] },
-          },
-        },
-        ],
+        items: [{ $skip: (page - 1) * limit }, { $limit: limit }],
         total: [{ $count: 'count' }],
       },
     },
   ];
 
   const [result] = await StockIssue.aggregate(pipeline);
+  const total = result?.total?.[0]?.count || 0;
   return {
     page,
     limit,
-    total: result?.total?.[0]?.count || 0,
+    total,
+    total_pages: Math.ceil(total / limit),
     items: (result?.items || []).map((item) => {
-      const status = String(item.status ?? 'ACTIVE').toLowerCase();
       return {
         id: item._id.toString(),
         issue_no: item.issueNo ?? '',
         issue_date: item.issueDate?.toISOString?.() || null,
-        status,
+        status: normalizeIssueStatusForClient(item.status),
         total_qty: item.totalQty ?? 0,
         items_count: item.itemsCount ?? 0,
         reference: item.reference ?? '',
@@ -385,22 +424,21 @@ export const listStockIssues = async ({ page = 1, limit = 20, status, q, dateFro
     }),
   };
 };
-
-export const getStockIssueById = async (id) => {
-  const issue = await StockIssue.findById(id)
+const getStockIssueById = async (id, pharmacyId) => {
+  const issue = await StockIssue.findOne({ _id: id, pharmacyId: ensurePharmacyId(pharmacyId) })
     .populate({ path: 'createdBy', select: 'fullName username' })
     .populate({ path: 'voidedBy', select: 'fullName username' })
     .lean();
 
   if (!issue) {
-    return null;
+    throw new ApiError(404, 'NOT_FOUND', 'Stock issue not found');
   }
 
   return {
     id: issue._id.toString(),
     issue_no: issue.issueNo,
     issue_date: issue.issueDate?.toISOString?.() || null,
-    status: String(issue.status ?? 'ACTIVE').toLowerCase(),
+    status: normalizeIssueStatusForClient(issue.status),
     reference: issue.reference || '',
     notes: issue.notes || '',
     total_qty: issue.totalQty,
@@ -437,20 +475,18 @@ export const getStockIssueById = async (id) => {
     })),
   };
 };
-
-export const updateStockIssue = async ({ id, issueDate, reference, notes, items }, user) => {
+const updateStockIssue = async ({ id, issueDate, reference, notes, items }, user) => {
   if (!Array.isArray(items) || items.length === 0) {
     throw new ApiError(400, 'VALIDATION_ERROR', 'At least one item is required');
   }
+
+  const pharmacyId = user?.pharmacy?.id || null;
 
   const session = await mongoose.startSession();
   try {
     session.startTransaction();
 
-    const issue = await StockIssue.findById(id).session(session);
-    if (!issue) {
-      throw new ApiError(404, 'NOT_FOUND', 'Stock issue not found');
-    }
+    const issue = await ensureIssueBelongsToPharmacy({ issueId: id, pharmacyId, session });
     if (issue.status === 'VOID') {
       throw new ApiError(400, 'ALREADY_VOIDED', 'Cannot edit a voided stock issue');
     }
@@ -477,7 +513,11 @@ export const updateStockIssue = async ({ id, issueDate, reference, notes, items 
         throw new ApiError(400, 'VALIDATION_ERROR', 'Quantity must be greater than zero');
       }
 
-      const batch = await ensureBatch({ batchStockId: item.batch_stock_id, session });
+      const batch = await ensureBatchBelongsToPharmacy({
+        batchStockId: item.batch_stock_id,
+        pharmacyId,
+        session,
+      });
       if (batch.expiryDate < new Date()) {
         throw new ApiError(400, 'BATCH_EXPIRED', 'Cannot issue from an expired batch');
       }
@@ -538,3 +578,5 @@ export const updateStockIssue = async ({ id, issueDate, reference, notes, items 
     session.endSession();
   }
 };
+
+module.exports = { createStockIssue, voidStockIssue, fefoSuggest, voidStockIssuesBulk, listStockIssues, getStockIssueById, updateStockIssue };

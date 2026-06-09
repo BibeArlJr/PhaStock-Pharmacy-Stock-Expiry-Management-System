@@ -1,18 +1,16 @@
-import mongoose from 'mongoose';
-
-import { connectDB } from '../config/db.js';
-import Medicine from '../models/Medicine.js';
-import BatchStock from '../models/BatchStock.js';
-import Pharmacy from '../models/Pharmacy.js';
-import PurchaseReceipt from '../models/PurchaseReceipt.js';
-import Settings from '../models/Settings.js';
-import StockIssue from '../models/StockIssue.js';
-import Supplier from '../models/Supplier.js';
-import User from '../models/User.js';
-import { hashPassword } from '../services/auth.service.js';
-import * as ReceiptService from '../services/receipt.service.js';
-import * as StockIssueService from '../services/stockIssue.service.js';
-
+const mongoose = require('mongoose');
+const { connectDB } = require('../config/db.js');
+const Medicine = require('../models/Medicine.js');
+const BatchStock = require('../models/BatchStock.js');
+const Pharmacy = require('../models/Pharmacy.js');
+const PurchaseReceipt = require('../models/PurchaseReceipt.js');
+const Settings = require('../models/Settings.js');
+const StockIssue = require('../models/StockIssue.js');
+const Supplier = require('../models/Supplier.js');
+const User = require('../models/User.js');
+const { hashPassword } = require('../services/auth.service.js');
+const ReceiptService = require('../services/receipt.service.js');
+const StockIssueService = require('../services/stockIssue.service.js');
 const now = new Date();
 
 const supplierSeeds = [

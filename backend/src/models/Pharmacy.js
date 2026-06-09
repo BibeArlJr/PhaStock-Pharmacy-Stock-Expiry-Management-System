@@ -1,5 +1,4 @@
-import mongoose from 'mongoose';
-
+const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
 const pharmacySchema = new Schema(
@@ -23,4 +22,4 @@ pharmacySchema.index({ name: 1 });
 
 const Pharmacy = mongoose.model('Pharmacy', pharmacySchema);
 
-export default Pharmacy;
+module.exports = Pharmacy;

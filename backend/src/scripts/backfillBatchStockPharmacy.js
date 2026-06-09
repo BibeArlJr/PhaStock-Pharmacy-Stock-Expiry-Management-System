@@ -1,10 +1,8 @@
-import mongoose from 'mongoose';
-
-import { connectDB } from '../config/db.js';
-import BatchStock from '../models/BatchStock.js';
-import PurchaseReceiptItem from '../models/PurchaseReceiptItem.js';
-import User from '../models/User.js';
-
+const mongoose = require('mongoose');
+const { connectDB } = require('../config/db.js');
+const BatchStock = require('../models/BatchStock.js');
+const PurchaseReceiptItem = require('../models/PurchaseReceiptItem.js');
+const User = require('../models/User.js');
 const args = process.argv.slice(2);
 const isDryRun = args.includes('--dry-run');
 const forcePharmacyArg = args.find((arg) => arg.startsWith('--force-pharmacy='));

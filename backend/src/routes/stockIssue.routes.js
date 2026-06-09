@@ -1,17 +1,8 @@
-import { Router } from 'express';
-
-import * as StockIssueController from '../controllers/stockIssue.controller.js';
-import { requireAuth } from '../middlewares/auth.js';
-import { validate } from '../middlewares/validate.js';
-import {
-  fefoSuggestQuerySchema,
-  createStockIssueSchema,
-  listStockIssueQuerySchema,
-  voidStockIssueSchema,
-  voidStockIssuesBulkSchema,
-  updateStockIssueSchema,
-} from '../validators/stockIssue.validators.js';
-
+const { Router } = require('express');
+const StockIssueController = require('../controllers/stockIssue.controller.js');
+const { requireAuth } = require('../middlewares/auth.js');
+const { validate } = require('../middlewares/validate.js');
+const { fefoSuggestQuerySchema, createStockIssueSchema, listStockIssueQuerySchema, voidStockIssueSchema, voidStockIssuesBulkSchema, updateStockIssueSchema } = require('../validators/stockIssue.validators.js');
 const router = Router();
 
 router.use(requireAuth);
@@ -25,4 +16,4 @@ router.patch('/:id', validate({ body: updateStockIssueSchema }), StockIssueContr
 router.post('/:id/void', validate({ body: voidStockIssueSchema }), StockIssueController.voidStockIssue);
 router.post('/void-bulk', validate({ body: voidStockIssuesBulkSchema }), StockIssueController.voidStockIssuesBulk);
 
-export default router;
+module.exports = router;

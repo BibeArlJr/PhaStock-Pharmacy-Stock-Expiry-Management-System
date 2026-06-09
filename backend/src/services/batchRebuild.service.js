@@ -1,10 +1,7 @@
-import mongoose from 'mongoose';
-
-import BatchStock from '../models/BatchStock.js';
-import PurchaseReceiptItem from '../models/PurchaseReceiptItem.js';
-import StockIssue from '../models/StockIssue.js';
-import ApiError from '../utils/ApiError.js';
-
+const mongoose = require('mongoose');const BatchStock = require('../models/BatchStock.js');
+const PurchaseReceiptItem = require('../models/PurchaseReceiptItem.js');
+const StockIssue = require('../models/StockIssue.js');
+const ApiError = require('../utils/ApiError.js');
 const buildBatchKey = ({ medicineId, pack, batchNo, expiryDate }) =>
   [
     medicineId.toString(),
@@ -179,8 +176,7 @@ const buildNextBatchDocs = ({ groupedRows, pharmacyObjectId, deductionsByKey }) 
 
   return { nextDocs, negativeKeys };
 };
-
-export const rebuildBatchStockForPharmacy = async ({ pharmacyId, session: externalSession } = {}) => {
+const rebuildBatchStockForPharmacy = async ({ pharmacyId, session: externalSession } = {}) => {
   if (!pharmacyId) {
     throw new ApiError(400, 'VALIDATION_ERROR', 'pharmacyId is required for rebuild');
   }
@@ -286,3 +282,5 @@ export const rebuildBatchStockForPharmacy = async ({ pharmacyId, session: extern
     }
   }
 };
+
+module.exports = { rebuildBatchStockForPharmacy };

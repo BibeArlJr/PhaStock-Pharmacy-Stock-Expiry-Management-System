@@ -1,10 +1,8 @@
-import jwt from 'jsonwebtoken';
-
-import { JWT_SECRET } from '../config/env.js';
-import User from '../models/User.js';
-import ApiError from '../utils/ApiError.js';
-
-export const requireAuth = async (req, res, next) => {
+const jwt = require('jsonwebtoken');
+const { JWT_SECRET } = require('../config/env.js');
+const User = require('../models/User.js');
+const ApiError = require('../utils/ApiError.js');
+const requireAuth = async (req, res, next) => {
   const authHeader = req.headers.authorization || '';
 
   if (!authHeader.startsWith('Bearer ')) {
@@ -62,3 +60,5 @@ export const requireAuth = async (req, res, next) => {
     return next(new ApiError(401, 'UNAUTHORIZED', 'Invalid or expired token.'));
   }
 };
+
+module.exports = { requireAuth };

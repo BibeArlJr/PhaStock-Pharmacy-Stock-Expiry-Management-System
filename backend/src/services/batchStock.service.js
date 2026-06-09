@@ -1,13 +1,10 @@
-import mongoose from 'mongoose';
-
-import BatchStock from '../models/BatchStock.js';
-import PurchaseReceipt from '../models/PurchaseReceipt.js';
-import PurchaseReceiptItem from '../models/PurchaseReceiptItem.js';
-import StockIssue from '../models/StockIssue.js';
-import ApiError from '../utils/ApiError.js';
-import { rebuildBatchStockForPharmacy } from './batchRebuild.service.js';
-import { getSettings } from './settings.service.js';
-
+const mongoose = require('mongoose');const BatchStock = require('../models/BatchStock.js');
+const PurchaseReceipt = require('../models/PurchaseReceipt.js');
+const PurchaseReceiptItem = require('../models/PurchaseReceiptItem.js');
+const StockIssue = require('../models/StockIssue.js');
+const ApiError = require('../utils/ApiError.js');
+const { rebuildBatchStockForPharmacy } = require('./batchRebuild.service.js');
+const { getSettings } = require('./settings.service.js');
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const startOfToday = () => {
@@ -203,8 +200,7 @@ const ensureManualBatch = (row) => {
     );
   }
 };
-
-export const listBatchStocks = async ({
+const listBatchStocks = async ({
   pharmacyId,
   q,
   expiryStatus = 'all',
@@ -212,6 +208,7 @@ export const listBatchStocks = async ({
   sort = 'expiry_stock',
   page = 1,
   limit = 20,
+  medicineId,
 }) => {
   const settings = await resolveSettings(pharmacyId);
   const todayStart = startOfToday();
@@ -221,6 +218,16 @@ export const listBatchStocks = async ({
   const match = {
     ...buildScopeFilter(pharmacyId),
   };
+
+  if (medicineId) {
+    try {
+      match.medicineId = new mongoose.Types.ObjectId(medicineId);
+    } catch (err) {
+      throw new ApiError(400, 'VALIDATION_ERROR', 'Invalid medicine id');
+    }
+  }
+
+  console.log('batchStocks filter', { medicineId, filter: match });
 
   if (expiryStatus === 'valid') {
     match.expiryDate = { $gt: todayEnd };
@@ -351,8 +358,7 @@ export const listBatchStocks = async ({
     },
   };
 };
-
-export const getBatchStockDetail = async ({ id, pharmacyId }) => {
+const getBatchStockDetail = async ({ id, pharmacyId }) => {
   const batchObjectId = new mongoose.Types.ObjectId(id);
   const todayStart = startOfToday();
   const settings = await resolveSettings(pharmacyId);
@@ -467,8 +473,7 @@ export const getBatchStockDetail = async ({ id, pharmacyId }) => {
 
   return { batch, receipt };
 };
-
-export const getBatchStockSource = async ({ id, pharmacyId }) => {
+const getBatchStockSource = async ({ id, pharmacyId }) => {
   const row = await BatchStock.findOne(
     {
       _id: new mongoose.Types.ObjectId(id),
@@ -498,8 +503,7 @@ export const getBatchStockSource = async ({ id, pharmacyId }) => {
       null,
   };
 };
-
-export const manualAddBatchStock = async ({
+const manualAddBatchStock = async ({
   pharmacyId,
   userId,
   medicineId,
@@ -589,8 +593,7 @@ export const manualAddBatchStock = async ({
 
   return toBatchResponse(mapped, settings, todayStart);
 };
-
-export const updateManualBatchStock = async ({
+const updateManualBatchStock = async ({
   id,
   pharmacyId,
   medicineId,
@@ -680,8 +683,7 @@ export const updateManualBatchStock = async ({
 
   return toBatchResponse(mapped, settings, todayStart);
 };
-
-export const deleteManualBatchStock = async ({ id, pharmacyId }) => {
+const deleteManualBatchStock = async ({ id, pharmacyId }) => {
   const existing = await BatchStock.findOne(
     {
       _id: new mongoose.Types.ObjectId(id),
@@ -771,8 +773,7 @@ const recalculateReceiptTotals = async ({ receiptId, session }) => {
     { session }
   );
 };
-
-export const deleteBatchStockById = async ({ id, pharmacyId }) => {
+const deleteBatchStockById = async ({ id, pharmacyId }) => {
   const session = await mongoose.startSession();
 
   try {
@@ -856,3 +857,5 @@ export const deleteBatchStockById = async ({ id, pharmacyId }) => {
     session.endSession();
   }
 };
+
+module.exports = { listBatchStocks, getBatchStockDetail, getBatchStockSource, manualAddBatchStock, updateManualBatchStock, deleteManualBatchStock, deleteBatchStockById };

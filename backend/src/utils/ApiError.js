@@ -1,4 +1,4 @@
-export default class ApiError extends Error {
+class ApiError extends Error {
   constructor(statusCode, code, message, details = null) {
     super(message);
 
@@ -10,3 +10,5 @@ export default class ApiError extends Error {
     Error.captureStackTrace?.(this, this.constructor);
   }
 }
+
+module.exports = ApiError;

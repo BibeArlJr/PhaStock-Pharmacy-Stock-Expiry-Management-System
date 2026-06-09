@@ -1,78 +1,98 @@
-import BatchStock from '../models/BatchStock.js';
-import { buildAlertMatchFilter, buildBatchFlags, resolveBatchFilterContext } from '../utils/batchFilters.js';
-
-const ALERT_PROJECTION = {
-  _id: 1,
-  medicineId: 1,
-  pack: 1,
-  batchNo: 1,
-  expiryDate: 1,
-  availableBoxes: 1,
-  purchasePrice: 1,
-  mrp: 1,
+const mongoose = require('mongoose');const BatchStock = require('../models/BatchStock.js');
+const Medicine = require('../models/Medicine.js');
+const ApiError = require('../utils/ApiError.js');
+const { getSettings } = require('./settings.service.js');
+const startOfToday = () => {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
 };
 
-const sortOptions = {
-  expiry_asc: { expiryDate: 1, _id: 1 },
-  expiry_desc: { expiryDate: -1, _id: -1 },
-  stock_asc: { availableBoxes: 1, _id: 1 },
-  stock_desc: { availableBoxes: -1, _id: -1 },
+const endOfDay = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
+
+const addDays = (date, days) => new Date(date.getFullYear(), date.getMonth(), date.getDate() + days, 0, 0, 0, 0);
+
+const buildScopeFilter = (pharmacyId) => {
+  if (!pharmacyId) return {};
+  if (!mongoose.Types.ObjectId.isValid(pharmacyId)) {
+    throw new ApiError(400, 'VALIDATION_ERROR', 'Invalid pharmacy id');
+  }
+  return { pharmacyId: new mongoose.Types.ObjectId(pharmacyId) };
 };
 
-const defaultSortByType = {
-  EXPIRED: 'expiry_asc',
-  EXPIRING_SOON: 'expiry_asc',
-  LOW_STOCK: 'stock_asc',
-  OUT_OF_STOCK: 'stock_asc',
+const mapMedicineLookup = async (rows) => {
+  const medicineIds = [...new Set(rows.map((r) => r.medicineId?.toString()).filter(Boolean))];
+  if (!medicineIds.length) return new Map();
+  const docs = await Medicine.find({ _id: { $in: medicineIds } }).select('name strength').lean();
+  return new Map(docs.map((doc) => [doc._id.toString(), doc]));
 };
 
-export const listAlertBatches = async ({ type, page = 1, limit = 20, sort }) => {
-  const context = await resolveBatchFilterContext();
-  const filter = buildAlertMatchFilter(type, context);
-
-  const sortKey = sort || defaultSortByType[type] || 'expiry_asc';
-  const sortBy = sortOptions[sortKey] || sortOptions.expiry_asc;
-  const skip = (page - 1) * limit;
-
-  const [rows, total] = await Promise.all([
-    BatchStock.find(filter, ALERT_PROJECTION)
-      .sort(sortBy)
-      .skip(skip)
-      .limit(limit)
-      .populate({
-        path: 'medicineId',
-        select: 'name strength',
-      })
-      .lean(),
-    BatchStock.countDocuments(filter),
-  ]);
-
-  const items = rows.map((row) => ({
-    id: row._id.toString(),
-    medicine: row.medicineId
-      ? {
-          id: row.medicineId._id.toString(),
-          name: row.medicineId.name,
-          strength: row.medicineId.strength || '',
-        }
-      : {
-          id: row.medicineId.toString(),
-          name: '',
-          strength: '',
-        },
-    pack: row.pack,
-    batch_no: row.batchNo,
-    expiry_date: row.expiryDate.toISOString(),
-    available_boxes: row.availableBoxes,
-    latest_purchase_price: row.purchasePrice,
-    latest_mrp: row.mrp,
-    flags: buildBatchFlags(row, context),
-  }));
-
+const buildAlertItem = (row, medicineMap) => {
+  const medicine = medicineMap.get(row.medicineId?.toString()) || {};
   return {
-    page,
-    limit,
-    total,
-    items,
+    batchStockId: row._id?.toString(),
+    medicineId: row.medicineId?.toString() || '',
+    medicineName: medicine.name || '',
+    strength: medicine.strength || '',
+    displayName: `${medicine.name || ''}${medicine.strength ? ` ${medicine.strength}` : ''}`.trim(),
+    batchNo: row.batchNo,
+    expiryDate: row.expiryDate?.toISOString?.() || null,
+    availableBoxes: row.availableBoxes,
+    sourceType: row.sourceType || 'unknown',
   };
 };
+const getAlerts = async ({ pharmacyId }) => {
+  const settings = await getSettings(pharmacyId);
+  const lowStockLimit = settings?.lowStockLimitBoxes ?? 2;
+  const expiryAlertDays = settings?.expiryAlertDays ?? 30;
+
+  const todayStart = startOfToday();
+  const todayEnd = endOfDay(todayStart);
+  const expiringThreshold = endOfDay(addDays(todayStart, expiryAlertDays));
+
+  const filter = {
+    ...buildScopeFilter(pharmacyId),
+    availableBoxes: { $gt: 0 },
+  };
+
+  const rows = await BatchStock.find(filter)
+    .select('medicineId batchNo expiryDate availableBoxes sourceType')
+    .lean();
+
+  const medicineMap = await mapMedicineLookup(rows);
+
+  const expired = [];
+  const expiringSoon = [];
+  const lowStock = [];
+
+  rows.forEach((row) => {
+    const expiryDate = row.expiryDate ? new Date(row.expiryDate) : null;
+    if (!expiryDate) return;
+
+    if (expiryDate <= todayEnd) {
+      expired.push(buildAlertItem(row, medicineMap));
+      return;
+    }
+
+    if (expiryDate <= expiringThreshold) {
+      expiringSoon.push(buildAlertItem(row, medicineMap));
+      return;
+    }
+
+    if ((row.availableBoxes ?? 0) <= lowStockLimit) {
+      lowStock.push(buildAlertItem(row, medicineMap));
+    }
+  });
+
+  return {
+    expired,
+    expiringSoon,
+    lowStock,
+    meta: {
+      expiry_alert_days: expiryAlertDays,
+      low_stock_limit: lowStockLimit,
+      generated_at: new Date().toISOString(),
+    },
+  };
+};
+
+module.exports = { getAlerts };

@@ -1,5 +1,4 @@
-import { z } from 'zod';
-
+const { z } = require('zod');
 const objectId = z
   .string()
   .regex(/^[a-fA-F0-9]{24}$/, 'Invalid ObjectId')
@@ -12,12 +11,10 @@ const stockItemSchema = z.object({
   rate: z.coerce.number().min(0).optional(),
   amount: z.coerce.number().min(0).optional(),
 });
-
-export const fefoSuggestQuerySchema = z.object({
+const fefoSuggestQuerySchema = z.object({
   medicine_id: objectId,
 });
-
-export const createStockIssueSchema = z.object({
+const createStockIssueSchema = z.object({
   issue_date: z.string().optional(),
   reference: z.string().trim().optional(),
   notes: z.string().trim().optional(),
@@ -25,15 +22,13 @@ export const createStockIssueSchema = z.object({
   to_store_id: objectId.optional(),
   items: z.array(stockItemSchema).min(1),
 });
-
-export const updateStockIssueSchema = z.object({
+const updateStockIssueSchema = z.object({
   issue_date: z.string().optional(),
   reference: z.string().trim().optional(),
   notes: z.string().trim().optional(),
   items: z.array(stockItemSchema).min(1),
 });
-
-export const listStockIssueQuerySchema = z.object({
+const listStockIssueQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
   status: z.enum(['all', 'active', 'voided']).default('all'),
@@ -41,12 +36,12 @@ export const listStockIssueQuerySchema = z.object({
   date_from: z.string().optional(),
   date_to: z.string().optional(),
 });
-
-export const voidStockIssueSchema = z.object({
+const voidStockIssueSchema = z.object({
   reason: z.string().trim().optional(),
 });
-
-export const voidStockIssuesBulkSchema = z.object({
+const voidStockIssuesBulkSchema = z.object({
   ids: z.array(objectId).min(1),
   reason: z.string().trim().optional(),
 });
+
+module.exports = { fefoSuggestQuerySchema, createStockIssueSchema, updateStockIssueSchema, listStockIssueQuerySchema, voidStockIssueSchema, voidStockIssuesBulkSchema };

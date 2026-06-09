@@ -5,7 +5,6 @@ import {
   LayoutDashboard,
   Pill,
   ReceiptText,
-  Search,
   Settings,
   Truck,
 } from 'lucide-react';
@@ -22,7 +21,6 @@ const navItems = [
   { label: 'Batch Stock', to: '/batch-stock', icon: Boxes },
   { label: 'Stock Issue', to: '/stock-issue', icon: ArrowLeftRight },
   { label: 'Alerts', to: '/alerts', icon: AlertTriangle },
-  { label: 'Receipt Search', to: '/receipt-search', icon: Search },
   { label: 'Medicines', to: '/medicines', icon: Pill },
   { label: 'Suppliers', to: '/suppliers', icon: Truck },
   { label: 'Settings', to: '/settings', icon: Settings },

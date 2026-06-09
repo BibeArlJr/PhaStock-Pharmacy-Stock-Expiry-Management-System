@@ -1,5 +1,4 @@
-import mongoose from 'mongoose';
-
+const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
 const batchStockSchema = new Schema(
@@ -86,4 +85,4 @@ batchStockSchema.index({ availableBoxes: 1 });
 
 const BatchStock = mongoose.model('BatchStock', batchStockSchema);
 
-export default BatchStock;
+module.exports = BatchStock;
